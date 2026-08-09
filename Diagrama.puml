@@ -1,0 +1,74 @@
+@startuml
+
+' --- Estilos para que se vea bonito ---
+skinparam classAttributeIconSize 0
+skinparam classBackgroundColor White
+skinparam classBorderColor #1565C0
+skinparam classArrowColor #1565C0
+
+' --- CLASE PADRE ---
+abstract class Transaccion {
+    # Double monto
+    # String descripcion
+    # String fecha
+    + Double getMontoTransaccion()
+    + {abstract} Double calcularSaldo(Double saldoActual)
+}
+
+' --- HIJOS (HERENCIA) ---
+class Ingreso {
+    + String origen
+    + Double calcularSaldo(Double saldoActual)
+}
+
+class Gasto {
+    + String destino
+    + Double calcularSaldo(Double saldoActual)
+}
+
+' --- GESTIÓN ---
+class Billetera {
+    - List<Transaccion> historial
+    - PersistenciaLocal persistencia
+    + void agregarMovimiento(Transaccion movimiento)
+    + Double obtenerSaldoTotal()
+    + List<Transaccion> obtenerHistorial()
+}
+
+class PersistenciaLocal {
+    - String rutaAndroid
+    - String rutaPC
+    + void guardar(List<Transaccion> lista)
+    + List<Transaccion> cargar()
+}
+
+' --- EXTRAS ---
+class MetaAhorro {
+    + String Meta
+    + Double totalMeta
+    + Double restante(Double saldoActual)
+    + String obtenerMeta(Double saldoActual)
+}
+
+class Deudas {
+    + String nombreDeuda
+    + Double montoDeuda
+    + Int totalCuotas
+    + Double montoPendiente
+    + Int cuotasPagadas
+    + void pagarCuota()
+    + String obtenerEstado()
+}
+
+' --- RELACIONES (FLECHAS) ---
+' Herencia (Ingreso ES UNA Transaccion)
+Transaccion <|-- Ingreso
+Transaccion <|-- Gasto
+
+' Composición (Billetera TIENE Transacciones)
+Billetera o-- Transaccion
+
+' Dependencia (Billetera USA Persistencia)
+Billetera ..> PersistenciaLocal
+
+@enduml
