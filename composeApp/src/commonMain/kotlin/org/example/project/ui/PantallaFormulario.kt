@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.example.project.dominio.PersistenciaLocal
 import org.example.project.dominio.Producto
+import org.example.project.dominio.nuevoId
 
 @Composable
 fun PantallaFormulario(
@@ -36,8 +37,8 @@ fun PantallaFormulario(
     val GrisClaro = Color(0xFFF5F5F5)
 
     // Variables de estado
-    // Si es edición, usamos el ID existente. Si es nuevo, generamos uno por hora actual.
-    val idActual = remember { productoAEditar?.id ?: System.currentTimeMillis().toString() }
+    // Si es edición conservamos el ID; los productos nuevos reciben un UUID estable.
+    val idActual = remember { productoAEditar?.id ?: nuevoId() }
 
     var nombre by remember { mutableStateOf(productoAEditar?.nombre ?: "") }
     var precioVentaTxt by remember { mutableStateOf(productoAEditar?.precioVenta?.toString() ?: "") }

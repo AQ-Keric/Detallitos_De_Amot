@@ -128,7 +128,7 @@ fun App() {
                         PantallaHistorialVentas(
                             ventas = listaVentas,
                             onEliminarVenta = { ventaAEliminar ->
-                                PersistenciaLocal.eliminarVenta(ventaAEliminar)
+                                PersistenciaLocal.eliminarVenta(ventaAEliminar.id)
                                 listaVentas.remove(ventaAEliminar)
                                 listaProductos.clear()
                                 listaProductos.addAll(PersistenciaLocal.obtenerProductos())

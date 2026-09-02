@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.example.project.dominio.Producto
 import org.example.project.dominio.Venta
+import org.example.project.dominio.nuevoId
 
 @Composable
 fun PantallaNuevaVenta(
@@ -163,7 +164,20 @@ fun FormularioVenta(producto: Producto, onConfirmar: (Venta) -> Unit) {
                 val cant = cantidadTxt.toIntOrNull() ?: 0
                 val totalFinal = totalCobrarTxt.toIntOrNull() ?: 0
                 if (cant > 0 && cant <= producto.stock && totalFinal >= 0) {
-                    onConfirmar(Venta(producto.nombre, cant, totalFinal, producto.precioVenta, producto.costoProduccion, metodoPago, producto.rutaImagen))
+                    onConfirmar(
+                        Venta(
+                            id = nuevoId(),
+                            productoId = producto.id,
+                            productoNombre = producto.nombre,
+                            cantidad = cant,
+                            total = totalFinal,
+                            precioUnitario = producto.precioVenta,
+                            costoUnitario = producto.costoProduccion,
+                            metodoPago = metodoPago,
+                            rutaImagen = producto.rutaImagen,
+                            fechaEpochMillis = System.currentTimeMillis()
+                        )
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth().height(60.dp),
