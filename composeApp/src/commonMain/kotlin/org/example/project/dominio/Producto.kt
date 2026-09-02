@@ -1,8 +1,7 @@
 package org.example.project.dominio
 
 data class Producto(
-
-    val id: String = System.currentTimeMillis().toString(),
+    val id: String,
     val nombre: String,
     val precioVenta: Int,
     val costoProduccion: Int,

@@ -19,10 +19,11 @@ object CalculadoraFinanciera {
 
     //Función 4: Productos más vendidos.
     fun obtenerTopVentas(ventas: List<Venta>, limite: Int = 3): List<Pair<String,Int>>{
-        val ventasAgrupadas = ventas.groupBy{it.productoNombre}
+        val ventasAgrupadas = ventas.groupBy(::claveProducto)
 
-        val totalesPorProducto = ventasAgrupadas.map {(nombre, listaVentasDelGrupo) ->
+        val totalesPorProducto = ventasAgrupadas.map {(_, listaVentasDelGrupo) ->
             val sumaCantidades = listaVentasDelGrupo.sumOf {it.cantidad}
+            val nombre = listaVentasDelGrupo.maxByOrNull { it.fechaEpochMillis }?.productoNombre.orEmpty()
             Pair(nombre,sumaCantidades)
         }
         val ordenadosDeMayorAMenor = totalesPorProducto.sortedByDescending{ it.second }
@@ -34,9 +35,10 @@ object CalculadoraFinanciera {
 
     //Función 5: Producto que da más ganancia.
     fun obtenerTopProductoGanancia(ventas: List<Venta>, limite: Int = 3): List<Pair<String, Int>>{
-        val ventasAgrupadas = ventas.groupBy{it.productoNombre}
-        val ventasTotalesPorProducto = ventasAgrupadas.map {(nombre, listaVentasDelGrupo)->
-            val sumatotal = listaVentasDelGrupo.sumOf{(it.precioUnitario - it.costoUnitario) * it.cantidad}
+        val ventasAgrupadas = ventas.groupBy(::claveProducto)
+        val ventasTotalesPorProducto = ventasAgrupadas.map {(_, listaVentasDelGrupo)->
+            val nombre = listaVentasDelGrupo.maxByOrNull { it.fechaEpochMillis }?.productoNombre.orEmpty()
+            val sumatotal = listaVentasDelGrupo.sumOf { it.ganancia }
             Pair(nombre,sumatotal)
         }
         val ordenadosDeMayorAMenor = ventasTotalesPorProducto.sortedByDescending{ it.second }
@@ -60,15 +62,11 @@ object CalculadoraFinanciera {
         val ingresosTotales = calcularIngresosTotales(ventas)
         val ticketPromedio = ingresosTotales / ventas.size
 
-        val formateador = java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm yyyy")
-        val anioActual = java.time.LocalDate.now().year
-
         val fechasReales = ventas.mapNotNull { venta ->
-            try {
-                java.time.LocalDateTime.parse("${venta.fecha} $anioActual", formateador).toLocalDate()
-            } catch (e: Exception) {
-                null
-            }
+            if (venta.fechaEpochMillis <= 0L) null
+            else java.time.Instant.ofEpochMilli(venta.fechaEpochMillis)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalDate()
         }
 
         if (fechasReales.isEmpty()) {
@@ -92,4 +90,7 @@ object CalculadoraFinanciera {
             "Mensual" to promedioMensual
         )
     }
+
+    private fun claveProducto(venta: Venta): String =
+        venta.productoId ?: "legacy:${venta.productoNombre.trim().lowercase()}"
 }

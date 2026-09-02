@@ -6,23 +6,29 @@ interface MotorPersistencia {
     fun guardarVentas(ventas: List<Venta>)
     fun cargarVentas(): List<Venta>
     fun importarImagen(uri: String): String
-
-    // --- NUEVAS FUNCIONES PARA LA META ---
     fun guardarMeta(meta: Int)
     fun cargarMeta(): Int
 }
 
 object PersistenciaLocal {
-    var motor: MotorPersistencia? = null
-
     private val productosCache = mutableListOf<Producto>()
     private val ventasCache = mutableListOf<Venta>()
-    private var metaCache: Int? = null // Cache para la meta
+    private var productosCargados = false
+    private var ventasCargadas = false
+    private var metaCache: Int? = null
 
-    // --- META DE VENTAS ---
+    var motor: MotorPersistencia? = null
+        set(value) {
+            field = value
+            productosCache.clear()
+            ventasCache.clear()
+            productosCargados = false
+            ventasCargadas = false
+            metaCache = null
+        }
+
     fun obtenerMeta(): Int {
         if (metaCache == null) {
-            // Si no hay nada guardado, carga del motor. Si el motor no tiene nada, da 200000 por defecto.
             metaCache = motor?.cargarMeta() ?: 200000
         }
         return metaCache!!
@@ -33,16 +39,13 @@ object PersistenciaLocal {
         motor?.guardarMeta(meta)
     }
 
-    // --- PRODUCTOS ---
     fun obtenerProductos(): List<Producto> {
-        if (productosCache.isEmpty()) {
-            val guardados = motor?.cargarProductos() ?: emptyList()
-            productosCache.addAll(guardados)
-        }
+        asegurarProductosCargados()
         return productosCache
     }
 
     fun guardarProducto(producto: Producto) {
+        asegurarProductosCargados()
         val index = productosCache.indexOfFirst { it.id == producto.id }
         if (index != -1) {
             productosCache[index] = producto
@@ -53,48 +56,53 @@ object PersistenciaLocal {
     }
 
     fun eliminarProducto(id: String) {
+        asegurarProductosCargados()
         productosCache.removeAll { it.id == id }
         motor?.guardarProductos(productosCache)
     }
 
-    // --- VENTAS ---
     fun obtenerVentas(): List<Venta> {
-        if (ventasCache.isEmpty()) {
-            val guardadas = motor?.cargarVentas() ?: emptyList()
-            ventasCache.addAll(guardadas)
-        }
+        asegurarVentasCargadas()
         return ventasCache
     }
 
     fun registrarVenta(venta: Venta) {
+        asegurarProductosCargados()
+        asegurarVentasCargadas()
+        require(ventasCache.none { it.id == venta.id }) { "La venta ya existe" }
+
+        val producto = venta.productoId?.let { id -> productosCache.find { it.id == id } }
+            ?: error("No se encontró el producto asociado a la venta")
+        val nuevoStock = producto.stock - venta.cantidad
+        require(nuevoStock >= 0) { "Stock insuficiente" }
+
         ventasCache.add(0, venta)
         motor?.guardarVentas(ventasCache)
-
-        val prod = productosCache.find { it.nombre == venta.productoNombre }
-        if (prod != null) {
-            val nuevoStock = prod.stock - venta.cantidad
-            if (nuevoStock >= 0) {
-                guardarProducto(prod.copy(stock = nuevoStock))
-            }
-        }
+        guardarProducto(producto.copy(stock = nuevoStock))
     }
 
-    fun eliminarVenta(venta: Venta) {
-        ventasCache.remove(venta)
+    fun eliminarVenta(ventaId: String) {
+        asegurarProductosCargados()
+        asegurarVentasCargadas()
+        val venta = ventasCache.find { it.id == ventaId } ?: return
+
+        ventasCache.removeAll { it.id == ventaId }
         motor?.guardarVentas(ventasCache)
 
-        val prod = productosCache.find { it.nombre == venta.productoNombre }
-        if (prod != null) {
-            guardarProducto(prod.copy(stock = prod.stock + venta.cantidad))
+        val producto = buscarProductoDeVenta(venta)
+        if (producto != null) {
+            guardarProducto(producto.copy(stock = producto.stock + venta.cantidad))
         } else {
-            val revivido = Producto(
-                nombre = venta.productoNombre,
-                precioVenta = venta.precioUnitario,
-                costoProduccion = venta.costoUnitario,
-                stock = venta.cantidad,
-                rutaImagen = venta.rutaImagen
+            guardarProducto(
+                Producto(
+                    id = venta.productoId ?: nuevoId(),
+                    nombre = venta.productoNombre,
+                    precioVenta = venta.precioUnitario,
+                    costoProduccion = venta.costoUnitario,
+                    stock = venta.cantidad,
+                    rutaImagen = venta.rutaImagen
+                )
             )
-            guardarProducto(revivido)
         }
     }
 
@@ -102,14 +110,41 @@ object PersistenciaLocal {
         if (ruta == null) return null
         return motor?.importarImagen(ruta) ?: ruta
     }
+
     fun exportarDatosParaRescate(): String {
         val productos = obtenerProductos()
         val ventas = obtenerVentas()
         val meta = obtenerMeta()
-
-        // Aquí generamos un JSON o XML con todo el contenido
-        // y lo guardamos en android.os.Environment.getExternalStorageDirectory()
-        // o en context.getExternalFilesDir(...) para sacarlo por ADB.
         return "Productos: ${productos.size}, Ventas: ${ventas.size}, Meta: $meta"
+    }
+
+    private fun asegurarProductosCargados() {
+        if (!productosCargados) {
+            productosCache.clear()
+            productosCache.addAll(motor?.cargarProductos() ?: emptyList())
+            productosCargados = true
+        }
+    }
+
+    private fun asegurarVentasCargadas() {
+        if (!ventasCargadas) {
+            ventasCache.clear()
+            ventasCache.addAll(motor?.cargarVentas() ?: emptyList())
+            ventasCargadas = true
+        }
+    }
+
+    private fun buscarProductoDeVenta(venta: Venta): Producto? {
+        venta.productoId?.let { id ->
+            productosCache.find { it.id == id }?.let { return it }
+        }
+
+        if (venta.productoId == null) {
+            val coincidencias = productosCache.filter {
+                it.nombre.trim().equals(venta.productoNombre.trim(), ignoreCase = true)
+            }
+            if (coincidencias.size == 1) return coincidencias.first()
+        }
+        return null
     }
 }
