@@ -7,6 +7,7 @@ xcuserdata
 local.properties
 .idea
 .DS_Store
+.Rhistory
 captures
 .externalNativeBuild
 .cxx
@@ -17,3 +18,9 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# Generated release artifacts and archives
+*.apk
+*.aab
+*.rar
+composeApp/release/
