@@ -46,6 +46,8 @@ fun PantallaFormulario(
     var precioVentaTxt by rememberSaveable { mutableStateOf(productoAEditar?.precioVenta?.toString() ?: "") }
     var costoProduccionTxt by rememberSaveable { mutableStateOf(productoAEditar?.costoProduccion?.toString() ?: "") }
     var stockTxt by rememberSaveable { mutableStateOf(productoAEditar?.stock?.toString() ?: "") }
+    var avisoStock by rememberSaveable { mutableStateOf(if (productoAEditar == null) true else productoAEditar.umbralStockBajo != null) }
+    var umbralTxt by rememberSaveable { mutableStateOf(productoAEditar?.umbralStockBajo?.toString() ?: "3") }
     var rutaImagenTemporal by rememberSaveable { mutableStateOf(productoAEditar?.rutaImagen) }
 
     var mostrarMenuFoto by rememberSaveable { mutableStateOf(false) }
@@ -230,6 +232,20 @@ fun PantallaFormulario(
                 colors = inputColors
             )
 
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Aviso de stock bajo", modifier = Modifier.weight(1f))
+                Switch(checked = avisoStock, onCheckedChange = { avisoStock = it })
+            }
+            if (avisoStock) {
+                OutlinedTextField(
+                    value = umbralTxt,
+                    onValueChange = { if (it.all { c -> c.isDigit() }) umbralTxt = it },
+                    label = { Text("Avisar con estas unidades o menos") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = umbralTxt.toIntOrNull() == null,
+                    modifier = Modifier.fillMaxWidth(), singleLine = true, colors = inputColors
+                )
+            }
             Spacer(modifier = Modifier.height(24.dp))
 
             if (precioVentaTxt.isNotEmpty() && precioVentaTxt.toIntOrNull() == null ||
@@ -252,7 +268,8 @@ fun PantallaFormulario(
                             precioVenta = precioVentaTxt.toIntOrNull() ?: 0,
                             costoProduccion = costoProduccionTxt.toIntOrNull() ?: 0,
                             stock = stockTxt.toIntOrNull() ?: 0,
-                            rutaImagen = rutaSegura
+                            rutaImagen = rutaSegura,
+                            umbralStockBajo = if (avisoStock) umbralTxt.toInt() else null
                         )
                         onGuardar(producto)
                     }
@@ -260,7 +277,7 @@ fun PantallaFormulario(
                 modifier = Modifier.fillMaxWidth().height(55.dp),
                 colors = ButtonDefaults.buttonColors(backgroundColor = GrisCarbon),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                enabled = nombre.isNotBlank() && (precioVentaTxt.toIntOrNull()?.let { it >= 0 } == true) &&
+                enabled = (!avisoStock || umbralTxt.toIntOrNull()?.let { it >= 0 } == true) && nombre.isNotBlank() && (precioVentaTxt.toIntOrNull()?.let { it >= 0 } == true) &&
                     (stockTxt.toIntOrNull()?.let { it >= 0 } == true) &&
                     (costoProduccionTxt.isBlank() || costoProduccionTxt.toIntOrNull()?.let { it >= 0 } == true)
             ) {

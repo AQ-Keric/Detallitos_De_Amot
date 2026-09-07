@@ -14,6 +14,7 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart // <-- NUEVO ÍCONO
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.runtime.*
@@ -45,6 +46,7 @@ fun App() {
         val listaVentas = remember { mutableStateListOf<Venta>() }
         var productoAEditar by remember { mutableStateOf<Producto?>(null) }
 
+        var archivosOcupados by remember { mutableStateOf(false) }
         var cargado by remember { mutableStateOf(false) }
         var ocupado by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
@@ -113,13 +115,14 @@ fun App() {
                 .navigationBarsPadding(),
             bottomBar = {
                 // 2. AGREGAMOS EL DASHBOARD A LA CONDICIÓN PARA QUE NO SE OCULTE LA BARRA
-                if (pantallaActual in listOf(PantallaActual.HOME, PantallaActual.INVENTARIO, PantallaActual.HISTORIAL_VENTAS, PantallaActual.DASHBOARD)) {
+                if (pantallaActual in listOf(PantallaActual.HOME, PantallaActual.INVENTARIO, PantallaActual.HISTORIAL_VENTAS, PantallaActual.DASHBOARD, PantallaActual.RESPALDO)) {
                     BottomNavigation(
                         backgroundColor = BlancoPuro,
                         contentColor = GrisCarbon,
                         elevation = 8.dp
                     ) {
                         BottomNavigationItem(
+                            enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.Home, null) },
                             label = { Text("Inicio") },
                             selected = pantallaActual == PantallaActual.HOME,
@@ -128,6 +131,7 @@ fun App() {
                             unselectedContentColor = GrisInactivo
                         )
                         BottomNavigationItem(
+                            enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.Inventory2, null) },
                             label = { Text("Inventario") },
                             selected = pantallaActual == PantallaActual.INVENTARIO,
@@ -136,6 +140,7 @@ fun App() {
                             unselectedContentColor = GrisInactivo
                         )
                         BottomNavigationItem(
+                            enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.History, null) },
                             label = { Text("Historial") },
                             selected = pantallaActual == PantallaActual.HISTORIAL_VENTAS,
@@ -145,10 +150,20 @@ fun App() {
                         )
                         // 3. AGREGAMOS EL BOTÓN FÍSICO A LA BARRA
                         BottomNavigationItem(
+                            enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.BarChart, null) },
-                            label = { Text("Dashboard") }, // <--- ¡AQUÍ ESTÁ EL CAMBIO!
+                            label = { Text("Resumen") }, // <--- ¡AQUÍ ESTÁ EL CAMBIO!
                             selected = pantallaActual == PantallaActual.DASHBOARD,
                             onClick = { pantallaActual = PantallaActual.DASHBOARD },
+                            selectedContentColor = GrisCarbon,
+                            unselectedContentColor = GrisInactivo
+                        )
+                        BottomNavigationItem(
+                            enabled = !archivosOcupados,
+                            icon = { Icon(Icons.Default.Backup, null) },
+                            label = { Text("Respaldo") },
+                            selected = pantallaActual == PantallaActual.RESPALDO,
+                            onClick = { pantallaActual = PantallaActual.RESPALDO },
                             selectedContentColor = GrisCarbon,
                             unselectedContentColor = GrisInactivo
                         )
@@ -159,12 +174,7 @@ fun App() {
             Box(modifier = Modifier.padding(paddingDelScaffold)) {
                 when (pantallaActual) {
                     PantallaActual.HOME -> {
-                        PantallaHome(
-                            onNavegarAVenta = { pantallaActual = PantallaActual.NUEVA_VENTA },
-                            onRespaldo = { pantallaActual = PantallaActual.RESPALDO },
-                            onInventario = { pantallaActual = PantallaActual.INVENTARIO },
-                            productos = listaProductos.toList(), ventas = listaVentas.toList()
-                        )
+                        PantallaHome(onNavegarAVenta = { pantallaActual = PantallaActual.NUEVA_VENTA })
                     }
                     PantallaActual.INVENTARIO -> {
                         PantallaInventario(
@@ -213,11 +223,11 @@ fun App() {
                         )
                     }
                     PantallaActual.RESPALDO -> {
-                        PantallaRespaldo(onActualizado = { refrescar(); cargado = true }, onVolver = { pantallaActual = PantallaActual.HOME })
+                        PantallaRespaldo(onOcupado = { archivosOcupados = it }, onActualizado = { refrescar(); cargado = true }, onVolver = { pantallaActual = PantallaActual.HOME })
                     }
                     // 4. AGREGAMOS EL ENRUTADOR PARA ABRIR LA PANTALLA
                     PantallaActual.DASHBOARD -> {
-                        PantallaDashboard(ventas = listaVentas.toList(), productos = listaProductos.toList())
+                        PantallaDashboard(ventas = listaVentas.toList())
                     }
                 }
             }

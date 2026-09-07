@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 import org.example.project.dominio.*
 
 @Composable
-fun PantallaRespaldo(onActualizado: () -> Unit, onVolver: () -> Unit) {
+fun PantallaRespaldo(onOcupado: (Boolean) -> Unit, onActualizado: () -> Unit, onVolver: () -> Unit) {
     var ocupado by remember { mutableStateOf(false) }
     var mensaje by remember { mutableStateOf<String?>(null) }
     var preparado by remember { mutableStateOf<RespaldoPreparado?>(null) }
@@ -24,7 +24,8 @@ fun PantallaRespaldo(onActualizado: () -> Unit, onVolver: () -> Unit) {
         onPreparado = { preparado = it; ocupado = false },
         onTerminado = { mensaje = it; ocupado = false }
     )
-    DisposableEffect(Unit) { onDispose { preparado?.descartar() } }
+    LaunchedEffect(ocupado) { onOcupado(ocupado) }
+    DisposableEffect(Unit) { onDispose { preparado?.descartar(); onOcupado(false) } }
     ManejarVolver(enabled = true) { if (!ocupado) onVolver() }
     preparado?.let { respaldo ->
         AlertDialog(
@@ -47,11 +48,10 @@ fun PantallaRespaldo(onActualizado: () -> Unit, onVolver: () -> Unit) {
         )
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(enabled = !ocupado, onClick = onVolver) { Text("Volver") }
-        Text("Respaldo y exportación", style = MaterialTheme.typography.h5)
+        Text("Respaldo", style = MaterialTheme.typography.h5)
         Text("${actual?.productos?.size ?: 0} productos · ${actual?.ventas?.size ?: 0} ventas")
         Text("Respaldo completo", style = MaterialTheme.typography.h6)
-        Text("Guarda un ZIP con tus productos, ventas, meta e imágenes para recuperar la app o cambiar de celular.")
+        Text("Productos, ventas, metas y fotos en un solo archivo.")
         Button(enabled = !ocupado && actual != null, modifier = Modifier.fillMaxWidth(), onClick = {
             ocupado = true
             try { controlador.exportarRespaldo(requireNotNull(actual)) } catch (e: Exception) { ocupado = false; mensaje = e.message }
@@ -62,7 +62,7 @@ fun PantallaRespaldo(onActualizado: () -> Unit, onVolver: () -> Unit) {
         }) { Text("Restaurar un respaldo") }
         Divider()
         Text("Ventas para planilla", style = MaterialTheme.typography.h6)
-        Text("Exporta todas las ventas a CSV, con fecha, cantidad, costos, total, ganancia y método de pago. El CSV es un informe; para restaurar usa el ZIP.")
+        Text("Tus ventas en CSV para abrir en una planilla.")
         OutlinedButton(enabled = !ocupado && actual != null, modifier = Modifier.fillMaxWidth(), onClick = {
             ocupado = true
             try { controlador.exportarVentas(requireNotNull(actual).ventas) } catch (e: Exception) { ocupado = false; mensaje = e.message }

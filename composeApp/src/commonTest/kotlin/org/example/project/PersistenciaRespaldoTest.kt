@@ -15,6 +15,32 @@ class PersistenciaRespaldoTest {
     private fun venta(p: Producto = producto(), id: String = "v", fecha: Long = 1000) = Venta(id, p.id, p.nombre, 2, 18000, p.precioVenta, p.costoProduccion, "Efectivo", p.rutaImagen, fecha)
     @AfterTest fun limpiar() { PersistenciaLocal.motor = null; temporal.deleteRecursively() }
 
+    @Test fun umbralIndividualSePuedeEditarYDesactivar() {
+        assertTrue(producto().copy(stock = 5, umbralStockBajo = 5).stockBajo)
+        assertFalse(producto().copy(stock = 6, umbralStockBajo = 5).stockBajo)
+        assertFalse(producto().copy(stock = 0, umbralStockBajo = null).stockBajo)
+        assertTrue(producto().copy(stock = 0, umbralStockBajo = 0).stockBajo)
+        assertFails { EstadoDatos(listOf(producto().copy(umbralStockBajo = -1))).validar() }
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        PersistenciaLocal.guardarProducto(producto().copy(umbralStockBajo = 8))
+        PersistenciaLocal.registrarVenta(venta())
+        assertTrue(PersistenciaLocal.obtenerProductos().single().stockBajo)
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        assertEquals(8, PersistenciaLocal.obtenerProductos().single().umbralStockBajo)
+        PersistenciaLocal.guardarProducto(PersistenciaLocal.obtenerProductos().single().copy(umbralStockBajo = null))
+        assertFalse(PersistenciaLocal.obtenerProductos().single().stockBajo)
+        val e = PersistenciaLocal.estado()
+        val bytes = ByteArrayOutputStream().also { Respaldo.exportar(e, it) }.toByteArray()
+        val listo = Respaldo.preparar(ByteArrayInputStream(bytes), temporal)
+        assertNull(listo.estado.productos.single().umbralStockBajo)
+        listo.descartar()
+    }
+    @Test fun respaldoV3RecibeUmbralCompatible() {
+        val xml = CodecEstado.codificar(EstadoDatos(listOf(producto()))).toString(Charsets.UTF_8)
+            .replace("<entry key=\"version\">4</entry>", "<entry key=\"version\">3</entry>")
+            .replace("<entry key=\"p.0.umbralStockBajo\">3</entry>", "")
+        assertEquals(3, CodecEstado.decodificar(xml.toByteArray()).productos.single().umbralStockBajo)
+    }
     @Test fun reiniciarYEliminarMetaNoTocanVentasNiStock() {
         PersistenciaLocal.motor = MotorArchivo(temporal)
         PersistenciaLocal.guardarProducto(producto())
@@ -83,7 +109,7 @@ class PersistenciaRespaldoTest {
     }
     @Test fun respaldoAnteriorConservaMetaTotalSinInventarMetasPorPeriodo() {
         val xml = CodecEstado.codificar(EstadoDatos(meta = 75000)).toString(Charsets.UTF_8)
-            .replace("<entry key=\"version\">3</entry>", "<entry key=\"version\">1</entry>")
+            .replace("<entry key=\"version\">4</entry>", "<entry key=\"version\">1</entry>")
         val e = CodecEstado.decodificar(xml.toByteArray())
         assertEquals(75000, e.meta)
         assertTrue(e.metasPorPeriodo.isEmpty())

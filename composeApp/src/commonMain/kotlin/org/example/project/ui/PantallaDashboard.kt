@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,7 +42,12 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.dominio.Producto>) {
+fun PantallaDashboard(ventas: List<Venta>) {
+    var verDetalles by remember { mutableStateOf(false) }
+    var verAyuda by remember { mutableStateOf(false) }
+    if (verAyuda) AlertDialog(onDismissRequest = { verAyuda = false }, title = { Text("Tus números") },
+        text = { Text("Ingresos: total vendido. Ganancia: ingresos menos el costo de los productos; no incluye otros gastos. Los promedios usan períodos con ventas. Las ventas sin fecha se incluyen solo en Total.") },
+        confirmButton = { TextButton(onClick = { verAyuda = false }) { Text("Entendido") } })
     // ESTADOS
     var modoActual by remember { mutableStateOf(ModoTiempo.TOTAL) }
     var fechaReferencia by remember { mutableStateOf(LocalDate.now()) }
@@ -255,7 +261,7 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
                         }) { Icon(Icons.Default.ChevronRight, "Siguiente", tint = GrisCarbon) }
                     }
                     Text(
-                        text = "Toca la fecha para selección exacta",
+                        text = "Toca la fecha para cambiarla",
                         fontSize = 10.sp,
                         color = Color.Gray,
                         modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -265,12 +271,7 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
             }
         }
 
-        item {
-            Text("Inventario: ${productos.size} productos · ${productos.count { it.stock == 0 }} agotados · ${productos.count { it.stock in 1..3 }} con stock bajo", color = GrisCarbon)
-            if (ventas.any { it.fechaEpochMillis <= 0L }) Text("Las ventas sin fecha válida se incluyen solamente en Total.", color = Color.Gray)
-            if (ventasFiltradas.isEmpty()) Text("Aún no hay ventas en este período.", color = Color.Gray)
-            Text("La ganancia descuenta el costo de producción registrado; no incluye otros gastos.", color = Color.Gray, fontSize = 12.sp)
-        }
+        if (ventasFiltradas.isEmpty()) item { Text("Sin ventas en este período", color = Color.Gray) }
         // --- SECCIÓN NUEVA: META DE VENTAS ---
         item {
             TarjetaMeta(
@@ -297,18 +298,25 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
         // --- SECCIÓN 3: MÉTRICAS ---
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TarjetaMetrica("INGRESOS", "$${ingresos.formatoPesos()}", BlancoPuro, GrisCarbon, Modifier.weight(1f))
-                TarjetaMetrica("GANANCIA ESTIMADA", "$${ganancia.formatoPesos()}", BlancoPuro, ColorGanancia, Modifier.weight(1f))
+                TarjetaMetrica("Ingresos", "$${ingresos.formatoPesos()}", BlancoPuro, GrisCarbon, Modifier.weight(1f))
+                TarjetaMetrica("Ganancia estimada", "$${ganancia.formatoPesos()}", BlancoPuro, ColorGanancia, Modifier.weight(1f))
             }
         }
 
         item {
-            TarjetaMetrica("COSTOS DE PRODUCCIÓN", "$${costos.formatoPesos()}", BlancoPuro, ColorCosto, Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = { verDetalles = !verDetalles }) { Text(if (verDetalles) "Menos detalles" else "Ver detalles") }
+                TextButton(onClick = { verAyuda = true }) { Text("Ayuda") }
+            }
+        }
+        if (verDetalles) {
+        item {
+            TarjetaMetrica("Costo de productos", "$${costos.formatoPesos()}", BlancoPuro, ColorCosto, Modifier.fillMaxWidth())
         }
 
         // --- SECCIÓN 4: CUADRATURA ---
         item {
-            Text("CUADRATURA DE CAJA", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GrisCarbon)
+            Text("Por medio de pago", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GrisCarbon)
             Spacer(modifier = Modifier.height(8.dp))
             if (metodosPago.isEmpty()) {
                 Text("Sin registros.", color = Color.Gray, fontSize = 14.sp)
@@ -321,9 +329,11 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
             }
         }
 
+        }
+
         // --- SECCIÓN 5: TOP VENTAS ---
         item {
-            Text("MÁS VENDIDOS (UNIDADES)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GrisCarbon)
+            Text("Más vendidos", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GrisCarbon)
             Spacer(modifier = Modifier.height(8.dp))
             Card(colors = CardDefaults.cardColors(containerColor = BlancoPuro), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -341,7 +351,7 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
         }
 
         // --- SECCIÓN 6: PROMEDIOS ---
-        item {
+        if (verDetalles) item {
             TarjetaPromedios(promedios = promedios, colorFondo = BlancoPuro, colorTexto = GrisCarbon)
         }
     }
@@ -353,12 +363,23 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
 
 @Composable
 fun TarjetaMeta(ingresos: Long, meta: Int?, titulo: String, descripcion: String, colorBarra: Color, colorFondo: Color, onEditarClick: () -> Unit, onEliminarClick: () -> Unit, onReiniciarClick: (() -> Unit)?) {
+    var menu by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colorFondo)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(titulo, color = Color.DarkGray, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(titulo, modifier = Modifier.weight(1f), color = Color.DarkGray, fontWeight = FontWeight.Bold)
+                if (meta != null) Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Opciones de meta") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Cambiar monto") }, onClick = { menu = false; onEditarClick() })
+                        onReiniciarClick?.let { accion -> DropdownMenuItem(text = { Text("Reiniciar desde cero") }, onClick = { menu = false; accion() }) }
+                        DropdownMenuItem(text = { Text("Eliminar meta") }, onClick = { menu = false; onEliminarClick() })
+                    }
+                }
+            }
             Text(descripcion, color = Color.Gray, fontSize = 12.sp)
             if (meta == null) {
-                Text("No has definido una meta para este período.", color = Color.Gray)
+                Text("Sin meta", color = Color.Gray)
                 OutlinedButton(onClick = onEditarClick) { Text("Definir meta") }
             } else {
                 val avance = MetasVentas.progreso(ingresos, meta)
@@ -372,9 +393,6 @@ fun TarjetaMeta(ingresos: Long, meta: Int?, titulo: String, descripcion: String,
                     avance.excedente > 0 -> "¡Meta superada por $${avance.excedente.formatoPesos()}!"
                     else -> "¡Meta alcanzada!"
                 }, color = Color.DarkGray)
-                TextButton(onClick = onEditarClick) { Text("Cambiar monto") }
-                onReiniciarClick?.let { accion -> OutlinedButton(onClick = accion) { Text("Reiniciar desde cero") } }
-                TextButton(onClick = onEliminarClick) { Text("Eliminar meta", color = Color(0xFFC62828)) }
             }
         }
     }
@@ -443,7 +461,7 @@ fun TarjetaPromedios(promedios: Map<String, Long>, colorFondo: Color, colorTexto
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "PROMEDIOS EN PERÍODOS CON VENTAS", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+            Text(text = "Promedios", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

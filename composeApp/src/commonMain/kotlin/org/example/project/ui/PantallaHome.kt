@@ -27,13 +27,7 @@ import org.jetbrains.compose.resources.painterResource
 
 
 @Composable
-fun PantallaHome(
-    onNavegarAVenta: () -> Unit,
-    onRespaldo: () -> Unit,
-    onInventario: () -> Unit,
-    productos: List<Producto>,
-    ventas: List<Venta>
-) {
+fun PantallaHome(onNavegarAVenta: () -> Unit) {
     // --- PALETA ELEGANCIA ---
     val GrisCarbon = Color(0xFF444444)
     val BlancoPuro = Color(0xFFFFFFFF)
@@ -81,19 +75,8 @@ fun PantallaHome(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "SISTEMA DE GESTIÓN",
-            fontSize = 14.sp,
-            letterSpacing = 3.sp, // Letras separadas (estilo premium)
-            color = Color.Gray,
-            fontWeight = FontWeight.Bold
-        )
-
         Spacer(modifier = Modifier.height(24.dp))
 
-        val hoy = FiltroVentas.aplicarFiltro(ventas, ModoTiempo.DIA, java.time.LocalDate.now())
-        Text("Hoy: ${hoy.size} ventas · $${CalculadoraFinanciera.calcularIngresosTotales(hoy).formatoPesos()}", color = GrisCarbon)
-        Spacer(Modifier.height(16.dp))
         // --- BOTÓN PRINCIPAL ---
         Button(
             onClick = onNavegarAVenta,
@@ -106,10 +89,5 @@ fun PantallaHome(
             Spacer(modifier = Modifier.width(12.dp))
             Text("NUEVA VENTA", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onInventario, modifier = Modifier.fillMaxWidth()) {
-            Text(if (productos.isEmpty()) "Agregar mi primer producto" else "Ver inventario · ${productos.count { it.stock <= 3 }} con stock bajo")
-        }
-        TextButton(onClick = onRespaldo) { Text("Respaldo y exportación", color = GrisCarbon) }
     }
 }

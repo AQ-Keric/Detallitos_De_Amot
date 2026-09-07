@@ -1,6 +1,8 @@
 package org.example.project.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -36,14 +38,15 @@ fun PantallaInventario(
     val FondoSuave = Color(0xFFFAFAFA)
 
     var textoBusqueda by remember { mutableStateOf("") }
-    var filtroStock by remember { mutableStateOf("En Stock") }
+    var filtroStock by remember { mutableStateOf("Todos") }
 
-    val productosFiltrados = remember(textoBusqueda, productos, filtroStock) {
+    val productosFiltrados = run {
         productos.filter { producto ->
             val coincideNombre = producto.nombre.contains(textoBusqueda, ignoreCase = true)
             val coincideStock = when (filtroStock) {
                 "En Stock" -> producto.stock > 0
                 "Agotados" -> producto.stock == 0
+                "Stock bajo" -> producto.stockBajo
                 else -> true
             }
             coincideNombre && coincideStock
@@ -84,12 +87,13 @@ fun PantallaInventario(
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ChipFiltro("En Stock", filtroStock == "En Stock") { filtroStock = "En Stock" }
-                ChipFiltro("Agotados", filtroStock == "Agotados") { filtroStock = "Agotados" }
                 ChipFiltro("Todos", filtroStock == "Todos") { filtroStock = "Todos" }
+                ChipFiltro("Stock bajo", filtroStock == "Stock bajo") { filtroStock = "Stock bajo" }
+                ChipFiltro("Agotados", filtroStock == "Agotados") { filtroStock = "Agotados" }
+                ChipFiltro("Con stock", filtroStock == "En Stock") { filtroStock = "En Stock" }
             }
 
             if (productosFiltrados.isEmpty()) {
@@ -102,7 +106,7 @@ fun PantallaInventario(
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(contentPadding = PaddingValues(bottom = 80.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(productosFiltrados, key = { it.id }) { producto ->
                         CardProducto(
                             producto = producto,
@@ -120,7 +124,7 @@ fun PantallaInventario(
 fun CardProducto(producto: Producto, onEditar: () -> Unit, onVerFoto: () -> Unit) {
     val imagenBitmap = recordarImagenDesdeRuta(producto.rutaImagen)
     val GrisCarbon = Color(0xFF444444)
-    val stockColor = if (producto.stock == 0) Color(0xFFD32F2F) else Color.Gray
+    val stockColor = when { producto.stock == 0 -> Color(0xFFD32F2F); producto.stockBajo -> Color(0xFFE65100); else -> Color.Gray }
 
     Card(
         elevation = 2.dp,
@@ -150,13 +154,13 @@ fun CardProducto(producto: Producto, onEditar: () -> Unit, onVerFoto: () -> Unit
             Column(modifier = Modifier.weight(1f)) {
                 Text(producto.nombre, style = MaterialTheme.typography.subtitle1, fontWeight = FontWeight.Bold)
                 Text(
-                    text = if (producto.stock == 0) "¡AGOTADO!" else "Stock: ${producto.stock}",
+                    text = when { producto.stock == 0 -> "Agotado"; producto.stockBajo -> "Stock bajo: ${producto.stock}"; else -> "Stock: ${producto.stock}" },
                     style = MaterialTheme.typography.caption,
                     color = stockColor,
                     fontWeight = if (producto.stock == 0) FontWeight.Bold else FontWeight.Normal
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("$${producto.precioVenta}", style = MaterialTheme.typography.subtitle1, color = GrisCarbon, fontWeight = FontWeight.ExtraBold)
+                Text("$${producto.precioVenta.formatoPesos()}", style = MaterialTheme.typography.subtitle1, color = GrisCarbon, fontWeight = FontWeight.ExtraBold)
             }
             IconButton(onClick = onEditar) {
                 Icon(Icons.Default.Edit, "Editar", tint = Color.Gray)
