@@ -26,14 +26,14 @@ import java.io.InputStream
 // 1. CARGADOR DE IMÁGENES (OPTIMIZADO)
 // ==========================================
 @Composable
-actual fun recordarImagenDesdeRuta(ruta: String?): ImageBitmap? {
+actual fun recordarImagenDesdeRuta(ruta: String?, maxDimension: Int): ImageBitmap? {
     if (ruta.isNullOrEmpty()) return null
     val context = LocalContext.current
 
-    return produceState<ImageBitmap?>(null, ruta) {
+    return produceState<ImageBitmap?>(null, ruta, maxDimension) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                cargarImagenReducida(context, ruta, 500)?.let { rotarBitmapSiEsNecesario(context, it, ruta).asImageBitmap() }
+                cargarImagenReducida(context, ruta, maxDimension.coerceIn(128, 2048))?.let { rotarBitmapSiEsNecesario(context, it, ruta).asImageBitmap() }
             } catch (_: Exception) { null }
         }
     }.value

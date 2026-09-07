@@ -30,13 +30,33 @@ object PersistenciaLocal {
         requireNotNull(motor) { "Almacenamiento no disponible" }.guardarEstado(nuevo)
         cache = nuevo // Solo publicar los cambios después de confirmar la escritura.
     }
-    fun obtenerMeta(clave: String): Int? = if (clave == "total") estado().meta.takeIf { estado().metaGlobalActiva } else estado().metasPorPeriodo[clave]
+    @Synchronized fun obtenerMeta(clave: String): Int? {
+        val e = estado()
+        return when {
+            clave == "total" -> e.meta.takeIf { e.metaGlobalActiva }
+            clave in e.periodosSinMeta -> null
+            else -> e.metasPorPeriodo[clave] ?: e.metasRepetidas[clave.substringBefore(':')]
+        }
+    }
+    @Synchronized fun guardarMetaRepetida(clave: String, monto: Int, todos: Boolean = false) {
+        MetasVentas.validarClave(clave)
+        val tipo = clave.substringBefore(':')
+        require(tipo in setOf("dia", "semana", "mes") && monto > 0)
+        val e = estado()
+        val tipos = if (todos) setOf("dia", "semana", "mes") else setOf(tipo)
+        guardar(e.copy(metasRepetidas = e.metasRepetidas + tipos.associateWith { monto },
+            metasPorPeriodo = e.metasPorPeriodo - clave, periodosSinMeta = e.periodosSinMeta - clave))
+    }
+    @Synchronized fun eliminarMetaRepetida(tipo: String) {
+        require(tipo in setOf("dia", "semana", "mes"))
+        guardar(estado().copy(metasRepetidas = estado().metasRepetidas - tipo))
+    }
     @Synchronized fun guardarMeta(clave: String, meta: Int) {
         require(meta > 0) { "La meta debe ser mayor que cero" }
         if (clave == "total") guardarMeta(meta)
         else {
             MetasVentas.validarClave(clave)
-            guardar(estado().copy(metasPorPeriodo = estado().metasPorPeriodo + (clave to meta)))
+            guardar(estado().copy(metasPorPeriodo = estado().metasPorPeriodo + (clave to meta), periodosSinMeta = estado().periodosSinMeta - clave))
         }
     }
     fun obtenerMeta(): Int = estado().meta
@@ -50,7 +70,7 @@ object PersistenciaLocal {
         if (clave == "total") guardar(e.copy(metaGlobalActiva = false, metaGlobalDesde = 0L))
         else {
             MetasVentas.validarClave(clave)
-            guardar(e.copy(metasPorPeriodo = e.metasPorPeriodo - clave))
+            guardar(e.copy(metasPorPeriodo = e.metasPorPeriodo - clave, periodosSinMeta = e.periodosSinMeta + clave))
         }
     }
     @Synchronized fun reiniciarMetaGlobal(monto: Int, desde: Long = System.currentTimeMillis()) {

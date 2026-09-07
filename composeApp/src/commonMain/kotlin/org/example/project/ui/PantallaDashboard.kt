@@ -1,5 +1,8 @@
 package org.example.project.ui
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +72,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
     var reiniciandoMeta by remember { mutableStateOf(false) }
     var confirmarEliminarMeta by remember { mutableStateOf(false) }
     var mostrarDialogoMeta by remember { mutableStateOf(false) }
+    var alcanceMeta by remember { mutableStateOf(0) }
     var inputNuevaMeta by remember { mutableStateOf("") }
     var errorMeta by remember { mutableStateOf<String?>(null) }
     if (errorMeta != null) AlertDialog(onDismissRequest = { errorMeta = null }, title = { Text("No se pudo guardar") }, text = { Text(errorMeta.orEmpty()) }, confirmButton = { TextButton(onClick = { errorMeta = null }) { Text("Entendido") } })
@@ -123,7 +127,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
             onDismissRequest = { if (!guardandoMeta) mostrarDialogoMeta = false },
             title = { Text(if (reiniciandoMeta) "Reiniciar meta global" else etiquetaMeta, fontWeight = FontWeight.Bold, color = GrisCarbon, fontSize = 18.sp) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(when {
                     reiniciandoMeta -> "El avance empezará desde cero con las ventas posteriores a la confirmación. Puedes mantener o cambiar el monto. No se borrará ninguna venta."
                     modoActual == ModoTiempo.TOTAL && metaDelPeriodo == null -> "Esta nueva meta contará las ventas desde ahora."
@@ -148,6 +152,34 @@ fun PantallaDashboard(ventas: List<Venta>) {
                         focusedLabelColor = GrisCarbon
                     )
                 )
+                if (modoActual != ModoTiempo.TOTAL) {
+                    val repeticion = when (modoActual) {
+                        ModoTiempo.DIA -> "Todos los días"
+                        ModoTiempo.SEMANA -> "Todas las semanas"
+                        else -> "Todos los meses"
+                    }
+                    listOf("Solo este período", repeticion, "Días, semanas y meses").forEachIndexed { indice, texto ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = alcanceMeta == indice, enabled = !guardandoMeta, onClick = { alcanceMeta = indice })
+                            TextButton(enabled = !guardandoMeta, onClick = { alcanceMeta = indice }) { Text(texto) }
+                        }
+                    }
+                    if (alcanceMeta > 0) Text("Se repite el monto; cada período tiene su propio avance. Se conservan las metas personalizadas de otros períodos.", fontSize = 12.sp)
+                    val tipo = claveMeta.substringBefore(':')
+                    if (PersistenciaLocal.estado().metasRepetidas.containsKey(tipo)) {
+                        TextButton(enabled = !guardandoMeta, onClick = {
+                            guardandoMeta = true
+                            scope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) { PersistenciaLocal.eliminarMetaRepetida(tipo) }
+                                    metaDelPeriodo = PersistenciaLocal.obtenerMeta(claveMeta)
+                                    mostrarDialogoMeta = false
+                                } catch (e: Exception) { errorMeta = e.message }
+                                finally { guardandoMeta = false }
+                            }
+                        }) { Text("Dejar de repetir en este modo") }
+                    }
+                }
                 }
             },
             confirmButton = {
@@ -159,6 +191,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
                         try {
                             withContext(Dispatchers.IO) {
                                 if (reiniciandoMeta) PersistenciaLocal.reiniciarMetaGlobal(monto)
+                                else if (alcanceMeta > 0 && clave != "total") PersistenciaLocal.guardarMetaRepetida(clave, monto, alcanceMeta == 2)
                                 else PersistenciaLocal.guardarMeta(clave, monto)
                             }
                             metaDelPeriodo = monto
@@ -289,6 +322,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
                 colorFondo = BlancoPuro,
                 onEditarClick = {
                     reiniciandoMeta = false
+                    alcanceMeta = 0
                     inputNuevaMeta = metaDelPeriodo?.toString().orEmpty()
                     mostrarDialogoMeta = true
                 }

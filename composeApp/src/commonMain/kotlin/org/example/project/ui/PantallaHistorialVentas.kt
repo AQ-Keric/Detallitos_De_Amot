@@ -177,7 +177,7 @@ fun CardVenta(
 
 @Composable
 fun DialogFotoGrandeHistoria(venta: Venta, onDismiss: () -> Unit) {
-    val imagenBitmap = recordarImagenDesdeRuta(venta.rutaImagen)
+    val imagenBitmap = recordarImagenDesdeRuta(venta.rutaImagen, maxDimension = 2048)
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp), elevation = 8.dp, modifier = Modifier.fillMaxWidth().height(400.dp)) {
             Box(modifier = Modifier.fillMaxSize()) {

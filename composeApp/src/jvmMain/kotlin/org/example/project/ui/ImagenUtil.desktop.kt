@@ -31,7 +31,7 @@ actual fun rememberControladorImagen(onImagenSeleccionada: (String) -> Unit): Co
 }
 
 @Composable
-actual fun recordarImagenDesdeRuta(ruta: String?): ImageBitmap? {
+actual fun recordarImagenDesdeRuta(ruta: String?, maxDimension: Int): ImageBitmap? {
     if (ruta.isNullOrEmpty()) return null
     var bitmap by remember(ruta) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(ruta) {

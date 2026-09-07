@@ -171,7 +171,7 @@ fun CardProducto(producto: Producto, onEditar: () -> Unit, onVerFoto: () -> Unit
 
 @Composable
 fun DialogFotoGrande(producto: Producto, onDismiss: () -> Unit) {
-    val imagenBitmap = recordarImagenDesdeRuta(producto.rutaImagen)
+    val imagenBitmap = recordarImagenDesdeRuta(producto.rutaImagen, maxDimension = 2048)
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp), elevation = 8.dp, modifier = Modifier.fillMaxWidth().height(400.dp)) {
             Box(modifier = Modifier.fillMaxSize()) {

@@ -61,7 +61,7 @@ fun PantallaFormulario(
         rutaImagenTemporal = nuevaRuta
         mostrarMenuFoto = false
     }
-    val imagenBitmap = recordarImagenDesdeRuta(rutaImagenTemporal)
+    val imagenBitmap = recordarImagenDesdeRuta(rutaImagenTemporal, maxDimension = 1024)
 
     // --- ALERTA BORRAR ---
     if (mostrarAlertaBorrar) {

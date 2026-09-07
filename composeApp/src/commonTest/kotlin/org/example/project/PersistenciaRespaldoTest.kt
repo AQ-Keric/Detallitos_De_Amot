@@ -15,6 +15,31 @@ class PersistenciaRespaldoTest {
     private fun venta(p: Producto = producto(), id: String = "v", fecha: Long = 1000) = Venta(id, p.id, p.nombre, 2, 18000, p.precioVenta, p.costoProduccion, "Efectivo", p.rutaImagen, fecha)
     @AfterTest fun limpiar() { PersistenciaLocal.motor = null; temporal.deleteRecursively() }
 
+    @Test fun metasRepetidasConExcepcionesPersistenEnRespaldo() {
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        PersistenciaLocal.guardarMeta("dia:2026-09-08", 700)
+        PersistenciaLocal.guardarMetaRepetida("dia:2026-09-07", 500, todos = true)
+        assertEquals(500, PersistenciaLocal.obtenerMeta("dia:2026-09-09"))
+        assertEquals(500, PersistenciaLocal.obtenerMeta("semana:2026-09-07"))
+        assertEquals(500, PersistenciaLocal.obtenerMeta("mes:2026-10"))
+        assertEquals(700, PersistenciaLocal.obtenerMeta("dia:2026-09-08"))
+        PersistenciaLocal.eliminarMeta("dia:2026-09-09")
+        assertNull(PersistenciaLocal.obtenerMeta("dia:2026-09-09"))
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        assertNull(PersistenciaLocal.obtenerMeta("dia:2026-09-09"))
+        val e = PersistenciaLocal.estado()
+        val bytes = ByteArrayOutputStream().also { Respaldo.exportar(e, it) }.toByteArray()
+        val listo = Respaldo.preparar(ByteArrayInputStream(bytes), temporal)
+        assertEquals(e, listo.estado)
+        listo.descartar()
+        PersistenciaLocal.guardarMeta("dia:2026-09-09", 900)
+        assertEquals(900, PersistenciaLocal.obtenerMeta("dia:2026-09-09"))
+        PersistenciaLocal.eliminarMetaRepetida("dia")
+        assertNull(PersistenciaLocal.obtenerMeta("dia:2026-09-10"))
+        assertEquals(700, PersistenciaLocal.obtenerMeta("dia:2026-09-08"))
+        assertEquals(500, PersistenciaLocal.obtenerMeta("mes:2026-10"))
+    }
+
     @Test fun umbralIndividualSePuedeEditarYDesactivar() {
         assertTrue(producto().copy(stock = 5, umbralStockBajo = 5).stockBajo)
         assertFalse(producto().copy(stock = 6, umbralStockBajo = 5).stockBajo)
@@ -37,7 +62,7 @@ class PersistenciaRespaldoTest {
     }
     @Test fun respaldoV3RecibeUmbralCompatible() {
         val xml = CodecEstado.codificar(EstadoDatos(listOf(producto()))).toString(Charsets.UTF_8)
-            .replace("<entry key=\"version\">4</entry>", "<entry key=\"version\">3</entry>")
+            .replace("<entry key=\"version\">5</entry>", "<entry key=\"version\">3</entry>")
             .replace("<entry key=\"p.0.umbralStockBajo\">3</entry>", "")
         assertEquals(3, CodecEstado.decodificar(xml.toByteArray()).productos.single().umbralStockBajo)
     }
@@ -109,7 +134,7 @@ class PersistenciaRespaldoTest {
     }
     @Test fun respaldoAnteriorConservaMetaTotalSinInventarMetasPorPeriodo() {
         val xml = CodecEstado.codificar(EstadoDatos(meta = 75000)).toString(Charsets.UTF_8)
-            .replace("<entry key=\"version\">4</entry>", "<entry key=\"version\">1</entry>")
+            .replace("<entry key=\"version\">5</entry>", "<entry key=\"version\">1</entry>")
         val e = CodecEstado.decodificar(xml.toByteArray())
         assertEquals(75000, e.meta)
         assertTrue(e.metasPorPeriodo.isEmpty())

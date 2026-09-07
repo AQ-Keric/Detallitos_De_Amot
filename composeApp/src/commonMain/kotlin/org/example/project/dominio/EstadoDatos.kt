@@ -10,9 +10,14 @@ data class EstadoDatos(
     val meta: Int = 200_000,
     val metasPorPeriodo: Map<String, Int> = emptyMap(),
     val metaGlobalActiva: Boolean = true,
-    val metaGlobalDesde: Long = 0L
+    val metaGlobalDesde: Long = 0L,
+    val metasRepetidas: Map<String, Int> = emptyMap(),
+    val periodosSinMeta: Set<String> = emptySet()
 ) {
     fun validar() {
+        require(metasRepetidas.keys.all { it in setOf("dia", "semana", "mes") } && metasRepetidas.values.all { it > 0 }) { "Meta repetida inválida" }
+        require(periodosSinMeta.size <= 100_000) { "Demasiadas excepciones de metas" }
+        periodosSinMeta.forEach { MetasVentas.validarClave(it); require(it != "total") }
         require(metaGlobalDesde >= 0L) { "Inicio de meta inválido" }
         require(metasPorPeriodo.size <= 100_000) { "Demasiadas metas" }
         metasPorPeriodo.forEach { (clave, monto) -> MetasVentas.validarClave(clave); require(monto > 0) { "Meta inválida" } }
@@ -40,8 +45,10 @@ object CodecEstado {
         estado.validar()
         val p = Properties()
         fun put(k: String, v: Any?) { if (v != null) p.setProperty(k, v.toString()) }
-        put("version", 4); put("app", "detallitos-de-amor"); put("meta", estado.meta)
+        put("version", 5); put("app", "detallitos-de-amor"); put("meta", estado.meta)
         put("metaGlobalActiva", estado.metaGlobalActiva); put("metaGlobalDesde", estado.metaGlobalDesde)
+        estado.metasRepetidas.forEach { (tipo, monto) -> put("metaRepetida.$tipo", monto) }
+        estado.periodosSinMeta.forEach { put("sinMeta.$it", true) }
         estado.metasPorPeriodo.forEach { (clave, monto) -> put("metaPeriodo.$clave", monto) }
         put("productos", estado.productos.size); put("ventas", estado.ventas.size)
         estado.productos.forEachIndexed { i, v ->
@@ -64,7 +71,7 @@ object CodecEstado {
         val p = Properties().apply { loadFromXML(ByteArrayInputStream(bytes)) }
         fun str(k: String) = requireNotNull(p.getProperty(k)) { "Falta el campo $k" }
         fun num(k: String) = str(k).toInt()
-        require(str("app") == "detallitos-de-amor" && num("version") in 1..4) { "Formato de respaldo no compatible" }
+        require(str("app") == "detallitos-de-amor" && num("version") in 1..5) { "Formato de respaldo no compatible" }
         val np = num("productos"); val nv = num("ventas")
         require(np in 0..100_000 && nv in 0..100_000) { "Cantidad de registros inválida" }
         return EstadoDatos(
@@ -82,7 +89,11 @@ object CodecEstado {
             if (num("version") >= 2) p.stringPropertyNames().filter { it.startsWith("metaPeriodo.") }
                 .associate { it.removePrefix("metaPeriodo.") to num(it) } else emptyMap(),
             if (num("version") >= 3) str("metaGlobalActiva").toBooleanStrict() else true,
-            if (num("version") >= 3) str("metaGlobalDesde").toLong() else 0L
+            if (num("version") >= 3) str("metaGlobalDesde").toLong() else 0L,
+            if (num("version") >= 5) p.stringPropertyNames().filter { it.startsWith("metaRepetida.") }
+                .associate { it.removePrefix("metaRepetida.") to num(it) } else emptyMap(),
+            if (num("version") >= 5) p.stringPropertyNames().filter { it.startsWith("sinMeta.") }
+                .map { it.removePrefix("sinMeta.") }.toSet() else emptySet()
         ).also { it.validar() }
     }
 }

@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 
 // 1. Para cargar imágenes (lo que ya tenías)
 @Composable
-expect fun recordarImagenDesdeRuta(ruta: String?): ImageBitmap?
+expect fun recordarImagenDesdeRuta(ruta: String?, maxDimension: Int = 512): ImageBitmap?
 
 // 2. Para capturar imágenes (LO NUEVO QUE FALTABA)
 interface ControladorImagen {

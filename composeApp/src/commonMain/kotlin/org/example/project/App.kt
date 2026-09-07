@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.example.project.dominio.PersistenciaLocal
 import org.example.project.dominio.Producto
 import org.example.project.dominio.Venta
@@ -124,7 +125,7 @@ fun App() {
                         BottomNavigationItem(
                             enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.Home, null) },
-                            label = { Text("Inicio") },
+                            label = { Text("Inicio", fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                             selected = pantallaActual == PantallaActual.HOME,
                             onClick = { pantallaActual = PantallaActual.HOME },
                             selectedContentColor = GrisCarbon,
@@ -133,7 +134,7 @@ fun App() {
                         BottomNavigationItem(
                             enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.Inventory2, null) },
-                            label = { Text("Inventario") },
+                            label = { Text("Inventario", fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                             selected = pantallaActual == PantallaActual.INVENTARIO,
                             onClick = { pantallaActual = PantallaActual.INVENTARIO },
                             selectedContentColor = GrisCarbon,
@@ -142,7 +143,7 @@ fun App() {
                         BottomNavigationItem(
                             enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.History, null) },
-                            label = { Text("Historial") },
+                            label = { Text("Historial", fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                             selected = pantallaActual == PantallaActual.HISTORIAL_VENTAS,
                             onClick = { pantallaActual = PantallaActual.HISTORIAL_VENTAS },
                             selectedContentColor = GrisCarbon,
@@ -152,7 +153,7 @@ fun App() {
                         BottomNavigationItem(
                             enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.BarChart, null) },
-                            label = { Text("Resumen") }, // <--- ¡AQUÍ ESTÁ EL CAMBIO!
+                            label = { Text("Resumen", fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, // <--- ¡AQUÍ ESTÁ EL CAMBIO!
                             selected = pantallaActual == PantallaActual.DASHBOARD,
                             onClick = { pantallaActual = PantallaActual.DASHBOARD },
                             selectedContentColor = GrisCarbon,
@@ -161,7 +162,7 @@ fun App() {
                         BottomNavigationItem(
                             enabled = !archivosOcupados,
                             icon = { Icon(Icons.Default.Backup, null) },
-                            label = { Text("Respaldo") },
+                            label = { Text("Respaldo", fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                             selected = pantallaActual == PantallaActual.RESPALDO,
                             onClick = { pantallaActual = PantallaActual.RESPALDO },
                             selectedContentColor = GrisCarbon,
