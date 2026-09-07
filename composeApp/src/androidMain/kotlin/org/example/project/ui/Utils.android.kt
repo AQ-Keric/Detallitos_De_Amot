@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -29,23 +30,13 @@ actual fun recordarImagenDesdeRuta(ruta: String?): ImageBitmap? {
     if (ruta.isNullOrEmpty()) return null
     val context = LocalContext.current
 
-    return remember(ruta) {
-        try {
-            // PASO 1: Cargar versión pequeña (Max 500px) para no saturar la RAM
-            val bitmapOriginal = cargarImagenReducida(context, ruta, 500)
-
-            // PASO 2: Enderezar la foto si viene rotada
-            if (bitmapOriginal != null) {
-                val bitmapRotado = rotarBitmapSiEsNecesario(context, bitmapOriginal, ruta)
-                bitmapRotado.asImageBitmap()
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
+    return produceState<ImageBitmap?>(null, ruta) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                cargarImagenReducida(context, ruta, 500)?.let { rotarBitmapSiEsNecesario(context, it, ruta).asImageBitmap() }
+            } catch (_: Exception) { null }
         }
-    }
+    }.value
 }
 
 // --- FUNCIÓN AUXILIAR: REDUCIR TAMAÑO ---
@@ -65,8 +56,8 @@ fun cargarImagenReducida(context: Context, ruta: String, maxAncho: Int): Bitmap?
 
         // 2. Calcular factor de reducción
         var escala = 1
-        while (opciones.outWidth / escala / 2 >= maxAncho &&
-            opciones.outHeight / escala / 2 >= maxAncho) {
+        while (opciones.outWidth / escala > maxAncho ||
+            opciones.outHeight / escala > maxAncho) {
             escala *= 2
         }
 
@@ -130,12 +121,13 @@ fun rotarBitmapSiEsNecesario(context: Context, bitmap: Bitmap, ruta: String): Bi
 @Composable
 actual fun rememberControladorImagen(onImagenSeleccionada: (String) -> Unit): ControladorImagen {
     val context = LocalContext.current
-    var uriTemporal by remember { mutableStateOf<Uri?>(null) }
+    var uriTexto by rememberSaveable { mutableStateOf<String?>(null) }
+    val seleccionar by rememberUpdatedState(onImagenSeleccionada)
 
     // 1. RESPUESTA DE LA CÁMARA
     val launcherCamara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { exito ->
-        if (exito && uriTemporal != null) {
-            onImagenSeleccionada(uriTemporal.toString())
+        if (exito && uriTexto != null) {
+            seleccionar(uriTexto!!)
         }
     }
 
@@ -146,8 +138,8 @@ actual fun rememberControladorImagen(onImagenSeleccionada: (String) -> Unit): Co
             try {
                 val archivoTemp = File.createTempFile("foto_${System.currentTimeMillis()}", ".jpg", context.cacheDir)
                 val authority = "${context.packageName}.fileprovider"
-                uriTemporal = FileProvider.getUriForFile(context, authority, archivoTemp)
-                launcherCamara.launch(uriTemporal!!)
+                uriTexto = FileProvider.getUriForFile(context, authority, archivoTemp).toString()
+                launcherCamara.launch(Uri.parse(uriTexto!!))
             } catch (e: Exception) {
                 Toast.makeText(context, "Error iniciando cámara: ${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -159,7 +151,7 @@ actual fun rememberControladorImagen(onImagenSeleccionada: (String) -> Unit): Co
     // 3. RESPUESTA DE LA GALERÍA
     val launcherGaleria = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
-            onImagenSeleccionada(uri.toString())
+            seleccionar(uri.toString())
         }
     }
 
@@ -181,8 +173,8 @@ actual fun rememberControladorImagen(onImagenSeleccionada: (String) -> Unit): Co
                     // IMPORTANTE: Esto debe coincidir con lo que pusiste en AndroidManifest.xml
                     val authority = "${context.packageName}.fileprovider"
 
-                    uriTemporal = FileProvider.getUriForFile(context, authority, archivoTemp)
-                    launcherCamara.launch(uriTemporal!!)
+                    uriTexto = FileProvider.getUriForFile(context, authority, archivoTemp).toString()
+                    launcherCamara.launch(Uri.parse(uriTexto!!))
 
                 } catch (e: IllegalArgumentException) {
                     // Este error sale si el "authority" no coincide con el Manifest

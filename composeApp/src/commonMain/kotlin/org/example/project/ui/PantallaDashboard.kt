@@ -34,19 +34,35 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.example.project.dominio.MetasVentas
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PantallaDashboard(ventas: List<Venta>) {
+fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.dominio.Producto>) {
     // ESTADOS
     var modoActual by remember { mutableStateOf(ModoTiempo.TOTAL) }
     var fechaReferencia by remember { mutableStateOf(LocalDate.now()) }
     var mostrarCalendario by remember { mutableStateOf(false) }
 
     // ESTADOS PARA LA META EDITABLE (Conectado a la base de datos)
-    var metaDelPeriodo by remember { mutableStateOf(PersistenciaLocal.obtenerMeta()) } // <-- Lee el valor guardado
+    val claveMeta = MetasVentas.clave(modoActual, fechaReferencia)
+    var metaDelPeriodo by remember(claveMeta) { mutableStateOf(PersistenciaLocal.obtenerMeta(claveMeta)) }
+    val etiquetaMeta = when (modoActual) {
+        ModoTiempo.DIA -> "Meta del día $fechaReferencia"
+        ModoTiempo.SEMANA -> "Meta de la semana del ${fechaReferencia.with(DayOfWeek.MONDAY)}"
+        ModoTiempo.MES -> "Meta de ${fechaReferencia.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("es-CL")))}"
+        ModoTiempo.TOTAL -> "Meta total acumulada"
+    }
+    val scope = rememberCoroutineScope()
+    var guardandoMeta by remember { mutableStateOf(false) }
+    ManejarVolver(enabled = guardandoMeta) {}
     var mostrarDialogoMeta by remember { mutableStateOf(false) }
     var inputNuevaMeta by remember { mutableStateOf("") }
+    var errorMeta by remember { mutableStateOf<String?>(null) }
+    if (errorMeta != null) AlertDialog(onDismissRequest = { errorMeta = null }, title = { Text("No se pudo guardar") }, text = { Text(errorMeta.orEmpty()) }, confirmButton = { TextButton(onClick = { errorMeta = null }) { Text("Entendido") } })
 
     // COLORES SERIOS
     val GrisCarbon = Color(0xFF444444)
@@ -57,9 +73,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
     val ColorMeta = Color(0xFFF57C00) // Naranja oscuro, más sobrio
 
     // FILTRO
-    val ventasFiltradas = remember(ventas, modoActual, fechaReferencia) {
-        FiltroVentas.aplicarFiltro(ventas, modoActual, fechaReferencia)
-    }
+    val ventasFiltradas = FiltroVentas.aplicarFiltro(ventas, modoActual, fechaReferencia)
 
     // CÁLCULOS
     val ingresos = CalculadoraFinanciera.calcularIngresosTotales(ventasFiltradas)
@@ -72,10 +86,11 @@ fun PantallaDashboard(ventas: List<Venta>) {
     // POPUP PARA EDITAR LA META
     if (mostrarDialogoMeta) {
         AlertDialog(
-            onDismissRequest = { mostrarDialogoMeta = false },
-            title = { Text("Ajustar Meta de Ventas", fontWeight = FontWeight.Bold, color = GrisCarbon, fontSize = 18.sp) },
+            onDismissRequest = { if (!guardandoMeta) mostrarDialogoMeta = false },
+            title = { Text(etiquetaMeta, fontWeight = FontWeight.Bold, color = GrisCarbon, fontSize = 18.sp) },
             text = {
                 OutlinedTextField(
+                    enabled = !guardandoMeta,
                     value = inputNuevaMeta,
                     onValueChange = { nuevoValor ->
                         // Filtro para asegurar que solo se ingresen números
@@ -94,18 +109,22 @@ fun PantallaDashboard(ventas: List<Venta>) {
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val montoParseado = inputNuevaMeta.toIntOrNull()
-                    if (montoParseado != null && montoParseado > 0) {
-                        metaDelPeriodo = montoParseado
-                        // ¡MAGIA AQUÍ! Guardamos físicamente para que no se borre al cerrar la app
-                        PersistenciaLocal.guardarMeta(montoParseado)
+                TextButton(enabled = !guardandoMeta && (inputNuevaMeta.toIntOrNull() ?: 0) > 0, onClick = {
+                    val monto = inputNuevaMeta.toIntOrNull() ?: return@TextButton
+                    val clave = claveMeta
+                    guardandoMeta = true
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) { PersistenciaLocal.guardarMeta(clave, monto) }
+                            metaDelPeriodo = monto
+                            mostrarDialogoMeta = false
+                        } catch (e: Exception) { errorMeta = e.message ?: "No se pudo guardar la meta" }
+                        finally { guardandoMeta = false }
                     }
-                    mostrarDialogoMeta = false
-                }) { Text("Guardar", color = GrisCarbon, fontWeight = FontWeight.Bold) }
+                }) { Text(if (guardandoMeta) "Guardando…" else "Guardar", color = GrisCarbon, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { mostrarDialogoMeta = false }) { Text("Cancelar", color = Color.Gray) }
+                TextButton(enabled = !guardandoMeta, onClick = { mostrarDialogoMeta = false }) { Text("Cancelar", color = Color.Gray) }
             }
         )
     }
@@ -167,13 +186,13 @@ fun PantallaDashboard(ventas: List<Venta>) {
 
                         val textoMostrar = when (modoActual) {
                             // ¡AQUÍ ESTÁ LA MAGIA! Le agregamos "EEEE, " al principio del patrón
-                            ModoTiempo.DIA -> fechaReferencia.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale("es", "CL")))
+                            ModoTiempo.DIA -> fechaReferencia.format(DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy", Locale.forLanguageTag("es-CL")))
                             ModoTiempo.SEMANA -> {
-                                val inicio = fechaReferencia.with(DayOfWeek.MONDAY).format(DateTimeFormatter.ofPattern("dd MMM"))
-                                val fin = fechaReferencia.with(DayOfWeek.SUNDAY).format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                                val inicio = fechaReferencia.with(DayOfWeek.MONDAY).format(DateTimeFormatter.ofPattern("dd MMM", Locale.forLanguageTag("es-CL")))
+                                val fin = fechaReferencia.with(DayOfWeek.SUNDAY).format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.forLanguageTag("es-CL")))
                                 "$inicio - $fin"
                             }
-                            ModoTiempo.MES -> fechaReferencia.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale("es", "CL")))
+                            ModoTiempo.MES -> fechaReferencia.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("es-CL")))
                             ModoTiempo.TOTAL -> ""
                         }.uppercase()
 
@@ -182,7 +201,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
                             fontWeight = FontWeight.Bold,
                             color = GrisCarbon,
                             modifier = Modifier
-                                .clickable { mostrarCalendario = true }
+                                .weight(1f).clickable { mostrarCalendario = true }
                                 .padding(8.dp)
                         )
 
@@ -206,15 +225,22 @@ fun PantallaDashboard(ventas: List<Venta>) {
             }
         }
 
+        item {
+            Text("Inventario: ${productos.size} productos · ${productos.count { it.stock == 0 }} agotados · ${productos.count { it.stock in 1..3 }} con stock bajo", color = GrisCarbon)
+            if (ventas.any { it.fechaEpochMillis <= 0L }) Text("Las ventas sin fecha válida se incluyen solamente en Total.", color = Color.Gray)
+            if (ventasFiltradas.isEmpty()) Text("Aún no hay ventas en este período.", color = Color.Gray)
+            Text("La ganancia descuenta el costo de producción registrado; no incluye otros gastos.", color = Color.Gray, fontSize = 12.sp)
+        }
         // --- SECCIÓN NUEVA: META DE VENTAS ---
         item {
             TarjetaMeta(
                 ingresos = ingresos,
                 meta = metaDelPeriodo,
+                titulo = etiquetaMeta,
                 colorBarra = ColorMeta,
                 colorFondo = BlancoPuro,
                 onEditarClick = {
-                    inputNuevaMeta = metaDelPeriodo.toString()
+                    inputNuevaMeta = metaDelPeriodo?.toString().orEmpty()
                     mostrarDialogoMeta = true
                 }
             )
@@ -224,7 +250,7 @@ fun PantallaDashboard(ventas: List<Venta>) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 TarjetaMetrica("INGRESOS", "$${ingresos.formatoPesos()}", BlancoPuro, GrisCarbon, Modifier.weight(1f))
-                TarjetaMetrica("GANANCIA NETA", "$${ganancia.formatoPesos()}", BlancoPuro, ColorGanancia, Modifier.weight(1f))
+                TarjetaMetrica("GANANCIA ESTIMADA", "$${ganancia.formatoPesos()}", BlancoPuro, ColorGanancia, Modifier.weight(1f))
             }
         }
 
@@ -278,61 +304,27 @@ fun PantallaDashboard(ventas: List<Venta>) {
 // =======================================================
 
 @Composable
-fun TarjetaMeta(ingresos: Int, meta: Int, colorBarra: Color, colorFondo: Color, onEditarClick: () -> Unit) {
-    val progreso = (ingresos.toFloat() / meta.toFloat()).coerceIn(0f, 1f)
-    val porcentajeTexto = (progreso * 100).toInt()
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colorFondo),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "OBJETIVO DE VENTAS", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Editar Meta",
-                        tint = Color.Gray,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { onEditarClick() }
-                    )
-                }
-                Text(text = "$porcentajeTexto%", fontSize = 12.sp, color = colorBarra, fontWeight = FontWeight.ExtraBold)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LinearProgressIndicator(
-                progress = { progreso },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = colorBarra,
-                trackColor = Color(0xFFE0E0E0),
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = "Actual: $${ingresos.formatoPesos()}", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
-                Text(text = "Meta: $${meta.formatoPesos()}", fontSize = 12.sp, color = Color.Gray)
-            }
-
-            // Mensaje serio y corporativo al cumplir el objetivo
-            if (ingresos >= meta) {
-                Text(
-                    text = "Objetivo del periodo alcanzado.",
-                    fontSize = 12.sp,
-                    color = colorBarra,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+fun TarjetaMeta(ingresos: Long, meta: Int?, titulo: String, colorBarra: Color, colorFondo: Color, onEditarClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colorFondo)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(titulo, color = Color.DarkGray, fontWeight = FontWeight.Bold)
+            Text("Se calcula con los ingresos por ventas del período seleccionado.", color = Color.Gray, fontSize = 12.sp)
+            if (meta == null) {
+                Text("No has definido una meta para este período.", color = Color.Gray)
+                OutlinedButton(onClick = onEditarClick) { Text("Definir meta") }
+            } else {
+                val avance = MetasVentas.progreso(ingresos, meta)
+                val porcentaje = java.text.NumberFormat.getNumberInstance(Locale.forLanguageTag("es-CL")).apply {
+                    maximumFractionDigits = 1
+                }.format(avance.porcentaje)
+                Text("$porcentaje% · $${ingresos.formatoPesos()} de $${meta.formatoPesos()}", color = colorBarra, fontWeight = FontWeight.Bold)
+                LinearProgressIndicator(progress = { avance.barra }, modifier = Modifier.fillMaxWidth(), color = colorBarra)
+                Text(when {
+                    avance.faltante > 0 -> "Faltan $${avance.faltante.formatoPesos()} para alcanzar tu meta."
+                    avance.excedente > 0 -> "¡Meta superada por $${avance.excedente.formatoPesos()}!"
+                    else -> "¡Meta alcanzada!"
+                }, color = Color.DarkGray)
+                TextButton(onClick = onEditarClick) { Text("Cambiar meta") }
             }
         }
     }
@@ -386,13 +378,13 @@ fun GraficoBarraSerio(nombre: String, valor: String, proporcion: Float, colorBar
 }
 
 
-fun Int.formatoPesos(): String {
-    val formato = java.text.NumberFormat.getNumberInstance(java.util.Locale("es", "CL"))
+fun Number.formatoPesos(): String {
+    val formato = java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag("es-CL"))
     return formato.format(this)
 }
 
 @Composable
-fun TarjetaPromedios(promedios: Map<String, Int>, colorFondo: Color, colorTexto: Color) {
+fun TarjetaPromedios(promedios: Map<String, Long>, colorFondo: Color, colorTexto: Color) {
     if (promedios.isEmpty()) return
 
     Card(
@@ -401,11 +393,11 @@ fun TarjetaPromedios(promedios: Map<String, Int>, colorFondo: Color, colorTexto:
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "RENDIMIENTO PROMEDIO", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+            Text(text = "PROMEDIOS EN PERÍODOS CON VENTAS", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                ColumnaPromedio("Por Venta", promedios["Por Cliente"], colorTexto)
+                ColumnaPromedio("Por Venta", promedios["Por Venta"], colorTexto)
                 ColumnaPromedio("Diario", promedios["Diario"], colorTexto)
                 ColumnaPromedio("Semanal", promedios["Semanal"], colorTexto)
                 ColumnaPromedio("Mensual", promedios["Mensual"], colorTexto)
@@ -415,7 +407,7 @@ fun TarjetaPromedios(promedios: Map<String, Int>, colorFondo: Color, colorTexto:
 }
 
 @Composable
-fun ColumnaPromedio(titulo: String, valor: Int?, colorTexto: Color) {
+fun ColumnaPromedio(titulo: String, valor: Long?, colorTexto: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = titulo, fontSize = 11.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
         Spacer(modifier = Modifier.height(4.dp))

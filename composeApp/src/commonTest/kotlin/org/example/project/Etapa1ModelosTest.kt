@@ -106,7 +106,7 @@ class Etapa1ModelosTest {
             fecha = 2_000L
         )
 
-        assertEquals(listOf("Ramo premium" to 3), CalculadoraFinanciera.obtenerTopVentas(listOf(antigua, reciente)))
+        assertEquals(listOf("Ramo premium" to 3L), CalculadoraFinanciera.obtenerTopVentas(listOf(antigua, reciente)))
     }
 
     private fun producto(

@@ -8,143 +8,87 @@ interface MotorPersistencia {
     fun importarImagen(uri: String): String
     fun guardarMeta(meta: Int)
     fun cargarMeta(): Int
+    fun cargarEstado(): EstadoDatos = EstadoDatos(cargarProductos(), cargarVentas(), cargarMeta())
+    // Los motores reales sobrescriben esto con una única escritura atómica.
+    fun guardarEstado(estado: EstadoDatos) {
+        guardarProductos(estado.productos); guardarVentas(estado.ventas); guardarMeta(estado.meta)
+    }
+    fun restaurarEstado(estado: EstadoDatos) = guardarEstado(estado)
+    fun avisoRecuperacion(): String? = null
 }
 
 object PersistenciaLocal {
-    private val productosCache = mutableListOf<Producto>()
-    private val ventasCache = mutableListOf<Venta>()
-    private var productosCargados = false
-    private var ventasCargadas = false
-    private var metaCache: Int? = null
-
+    private var cache: EstadoDatos? = null
     var motor: MotorPersistencia? = null
-        set(value) {
-            field = value
-            productosCache.clear()
-            ventasCache.clear()
-            productosCargados = false
-            ventasCargadas = false
-            metaCache = null
+        set(value) { field = value; cache = null }
+
+    @Synchronized fun estado(): EstadoDatos = cache ?: requireNotNull(motor) { "Almacenamiento no disponible" }
+        .cargarEstado().also { it.validar(); cache = it }
+
+    @Synchronized private fun guardar(nuevo: EstadoDatos) {
+        nuevo.validar()
+        requireNotNull(motor) { "Almacenamiento no disponible" }.guardarEstado(nuevo)
+        cache = nuevo // Solo publicar los cambios después de confirmar la escritura.
+    }
+    fun obtenerMeta(clave: String): Int? = if (clave == "total") estado().meta else estado().metasPorPeriodo[clave]
+    @Synchronized fun guardarMeta(clave: String, meta: Int) {
+        require(meta > 0) { "La meta debe ser mayor que cero" }
+        if (clave == "total") guardarMeta(meta)
+        else {
+            MetasVentas.validarClave(clave)
+            guardar(estado().copy(metasPorPeriodo = estado().metasPorPeriodo + (clave to meta)))
         }
+    }
+    fun obtenerMeta(): Int = estado().meta
+    fun guardarMeta(meta: Int) = guardar(estado().copy(meta = meta))
+    fun obtenerProductos(): List<Producto> = estado().productos.toList()
+    fun obtenerVentas(): List<Venta> = estado().ventas.toList()
 
-    fun obtenerMeta(): Int {
-        if (metaCache == null) {
-            metaCache = motor?.cargarMeta() ?: 200000
-        }
-        return metaCache!!
+    @Synchronized fun guardarProducto(producto: Producto) {
+        val e = estado()
+        val productos = e.productos.toMutableList()
+        val i = productos.indexOfFirst { it.id == producto.id }
+        if (i < 0) productos.add(producto) else productos[i] = producto
+        guardar(e.copy(productos = productos))
+    }
+    @Synchronized fun eliminarProducto(id: String) = guardar(estado().copy(productos = estado().productos.filterNot { it.id == id }))
+
+    @Synchronized fun registrarVenta(venta: Venta) {
+        val e = estado()
+        require(e.ventas.none { it.id == venta.id }) { "La venta ya existe" }
+        require(venta.cantidad > 0) { "Ingresa una cantidad mayor que cero" }
+        val producto = e.productos.find { it.id == venta.productoId } ?: error("El producto ya no existe")
+        require(venta.cantidad <= producto.stock) { "Stock insuficiente" }
+        // El snapshot lo toma el repositorio para no depender de una pantalla desactualizada.
+        val historica = venta.copy(productoNombre = producto.nombre, precioUnitario = producto.precioVenta,
+            costoUnitario = producto.costoProduccion, rutaImagen = producto.rutaImagen)
+        guardar(e.copy(ventas = listOf(historica) + e.ventas,
+            productos = e.productos.map { if (it.id == producto.id) it.copy(stock = it.stock - venta.cantidad) else it }))
     }
 
-    fun guardarMeta(meta: Int) {
-        metaCache = meta
-        motor?.guardarMeta(meta)
-    }
-
-    fun obtenerProductos(): List<Producto> {
-        asegurarProductosCargados()
-        return productosCache
-    }
-
-    fun guardarProducto(producto: Producto) {
-        asegurarProductosCargados()
-        val index = productosCache.indexOfFirst { it.id == producto.id }
-        if (index != -1) {
-            productosCache[index] = producto
-        } else {
-            productosCache.add(producto)
-        }
-        motor?.guardarProductos(productosCache)
-    }
-
-    fun eliminarProducto(id: String) {
-        asegurarProductosCargados()
-        productosCache.removeAll { it.id == id }
-        motor?.guardarProductos(productosCache)
-    }
-
-    fun obtenerVentas(): List<Venta> {
-        asegurarVentasCargadas()
-        return ventasCache
-    }
-
-    fun registrarVenta(venta: Venta) {
-        asegurarProductosCargados()
-        asegurarVentasCargadas()
-        require(ventasCache.none { it.id == venta.id }) { "La venta ya existe" }
-
-        val producto = venta.productoId?.let { id -> productosCache.find { it.id == id } }
-            ?: error("No se encontró el producto asociado a la venta")
-        val nuevoStock = producto.stock - venta.cantidad
-        require(nuevoStock >= 0) { "Stock insuficiente" }
-
-        ventasCache.add(0, venta)
-        motor?.guardarVentas(ventasCache)
-        guardarProducto(producto.copy(stock = nuevoStock))
-    }
-
-    fun eliminarVenta(ventaId: String) {
-        asegurarProductosCargados()
-        asegurarVentasCargadas()
-        val venta = ventasCache.find { it.id == ventaId } ?: return
-
-        ventasCache.removeAll { it.id == ventaId }
-        motor?.guardarVentas(ventasCache)
-
-        val producto = buscarProductoDeVenta(venta)
+    @Synchronized fun eliminarVenta(ventaId: String) {
+        val e = estado()
+        val venta = e.ventas.find { it.id == ventaId } ?: return
+        // Una relación legada ambigua nunca se resuelve de nuevo por nombre.
+        val producto = e.productos.find { venta.productoId != null && it.id == venta.productoId }
+        val productos = e.productos.toMutableList()
         if (producto != null) {
-            guardarProducto(producto.copy(stock = producto.stock + venta.cantidad))
+            val stock = producto.stock.toLong() + venta.cantidad
+            require(stock <= Int.MAX_VALUE) { "El stock excede el máximo permitido" }
+            productos[productos.indexOf(producto)] = producto.copy(stock = stock.toInt())
         } else {
-            guardarProducto(
-                Producto(
-                    id = venta.productoId ?: nuevoId(),
-                    nombre = venta.productoNombre,
-                    precioVenta = venta.precioUnitario,
-                    costoProduccion = venta.costoUnitario,
-                    stock = venta.cantidad,
-                    rutaImagen = venta.rutaImagen
-                )
-            )
+            productos.add(Producto(venta.productoId ?: nuevoId(), venta.productoNombre,
+                venta.precioUnitario, venta.costoUnitario, venta.cantidad, venta.rutaImagen))
         }
+        guardar(e.copy(productos = productos, ventas = e.ventas.filterNot { it.id == ventaId }))
     }
 
-    fun prepararImagen(ruta: String?): String? {
-        if (ruta == null) return null
-        return motor?.importarImagen(ruta) ?: ruta
+    fun prepararImagen(ruta: String?): String? = ruta?.let { requireNotNull(motor).importarImagen(it) }
+    @Synchronized fun importarEstado(estado: EstadoDatos) {
+        val nuevo = estado.copy(productos = estado.productos.toList(), ventas = estado.ventas.toList())
+        nuevo.validar()
+        requireNotNull(motor).restaurarEstado(nuevo)
+        cache = nuevo
     }
-
-    fun exportarDatosParaRescate(): String {
-        val productos = obtenerProductos()
-        val ventas = obtenerVentas()
-        val meta = obtenerMeta()
-        return "Productos: ${productos.size}, Ventas: ${ventas.size}, Meta: $meta"
-    }
-
-    private fun asegurarProductosCargados() {
-        if (!productosCargados) {
-            productosCache.clear()
-            productosCache.addAll(motor?.cargarProductos() ?: emptyList())
-            productosCargados = true
-        }
-    }
-
-    private fun asegurarVentasCargadas() {
-        if (!ventasCargadas) {
-            ventasCache.clear()
-            ventasCache.addAll(motor?.cargarVentas() ?: emptyList())
-            ventasCargadas = true
-        }
-    }
-
-    private fun buscarProductoDeVenta(venta: Venta): Producto? {
-        venta.productoId?.let { id ->
-            productosCache.find { it.id == id }?.let { return it }
-        }
-
-        if (venta.productoId == null) {
-            val coincidencias = productosCache.filter {
-                it.nombre.trim().equals(venta.productoNombre.trim(), ignoreCase = true)
-            }
-            if (coincidencias.size == 1) return coincidencias.first()
-        }
-        return null
-    }
+    fun exportarDatosParaRescate(): String = CodecEstado.codificar(estado()).toString(Charsets.UTF_8)
 }

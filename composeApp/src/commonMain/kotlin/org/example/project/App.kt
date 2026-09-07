@@ -1,6 +1,11 @@
 package org.example.project
 
-import androidx.activity.compose.BackHandler
+import org.example.project.ui.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -28,7 +33,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 
 // 1. AGREGAMOS "DASHBOARD" A LA LISTA DE PANTALLAS
 enum class PantallaActual {
-    HOME, INVENTARIO, HISTORIAL_VENTAS, NUEVA_VENTA, FORMULARIO_PRODUCTO, DASHBOARD
+    HOME, INVENTARIO, HISTORIAL_VENTAS, NUEVA_VENTA, FORMULARIO_PRODUCTO, DASHBOARD, RESPALDO
 }
 
 @Composable
@@ -40,19 +45,64 @@ fun App() {
         val listaVentas = remember { mutableStateListOf<Venta>() }
         var productoAEditar by remember { mutableStateOf<Producto?>(null) }
 
-        LaunchedEffect(Unit) {
-            listaProductos.addAll(PersistenciaLocal.obtenerProductos())
-            listaVentas.addAll(PersistenciaLocal.obtenerVentas())
+        var cargado by remember { mutableStateOf(false) }
+        var ocupado by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+        fun refrescar() {
+            listaProductos.clear(); listaProductos.addAll(PersistenciaLocal.obtenerProductos())
+            listaVentas.clear(); listaVentas.addAll(PersistenciaLocal.obtenerVentas())
         }
-
-        BackHandler(enabled = pantallaActual != PantallaActual.HOME) {
-            if (pantallaActual == PantallaActual.FORMULARIO_PRODUCTO) {
-                pantallaActual = PantallaActual.INVENTARIO
-            } else {
-                pantallaActual = PantallaActual.HOME
+        fun cargar() {
+            ocupado = true
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) { PersistenciaLocal.estado() }
+                    refrescar(); cargado = true
+                    error = PersistenciaLocal.motor?.avisoRecuperacion()
+                } catch (e: Exception) { error = e.message ?: "No se pudieron cargar tus datos" }
+                finally { ocupado = false }
             }
         }
+        fun ejecutar(destino: PantallaActual, accion: () -> Unit) {
+            if (ocupado) return
+            ocupado = true
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) { accion() }
+                    refrescar(); pantallaActual = destino
+                } catch (e: Exception) { error = e.message ?: "No se pudo guardar. Inténtalo de nuevo." }
+                finally { ocupado = false }
+            }
+        }
+        LaunchedEffect(Unit) { cargar() }
+        ManejarVolver(enabled = ocupado || pantallaActual != PantallaActual.HOME) {
+            if (!ocupado) pantallaActual = if (pantallaActual == PantallaActual.FORMULARIO_PRODUCTO) PantallaActual.INVENTARIO else PantallaActual.HOME
+        }
+        error?.let { mensaje ->
+            AlertDialog(onDismissRequest = { error = null }, title = { Text("Aviso") },
+                text = { Text(mensaje) }, confirmButton = { TextButton(onClick = { error = null }) { Text("Entendido") } })
+        }
+        if (!cargado && pantallaActual != PantallaActual.RESPALDO) {
+            Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+                Text(if (ocupado) "Cargando tus datos…" else "No se pudieron abrir tus datos. No se han reemplazado por datos vacíos.")
+                if (ocupado) CircularProgressIndicator() else {
+                    Button(onClick = { cargar() }) { Text("Reintentar") }
+                    TextButton(onClick = { pantallaActual = PantallaActual.RESPALDO }) { Text("Restaurar un respaldo") }
+                }
+            }
+            return@MaterialTheme
+        }
 
+        if (ocupado) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+                Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
+                    Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(24.dp)); Spacer(Modifier.width(16.dp)); Text("Guardando…")
+                    }
+                }
+            }
+        }
         val GrisCarbon = Color(0xFF444444)
         val BlancoPuro = Color(0xFFFFFFFF)
         val GrisInactivo = Color(0xFFBDBDBD)
@@ -109,7 +159,12 @@ fun App() {
             Box(modifier = Modifier.padding(paddingDelScaffold)) {
                 when (pantallaActual) {
                     PantallaActual.HOME -> {
-                        PantallaHome(onNavegarAVenta = { pantallaActual = PantallaActual.NUEVA_VENTA })
+                        PantallaHome(
+                            onNavegarAVenta = { pantallaActual = PantallaActual.NUEVA_VENTA },
+                            onRespaldo = { pantallaActual = PantallaActual.RESPALDO },
+                            onInventario = { pantallaActual = PantallaActual.INVENTARIO },
+                            productos = listaProductos.toList(), ventas = listaVentas.toList()
+                        )
                     }
                     PantallaActual.INVENTARIO -> {
                         PantallaInventario(
@@ -128,10 +183,7 @@ fun App() {
                         PantallaHistorialVentas(
                             ventas = listaVentas,
                             onEliminarVenta = { ventaAEliminar ->
-                                PersistenciaLocal.eliminarVenta(ventaAEliminar.id)
-                                listaVentas.remove(ventaAEliminar)
-                                listaProductos.clear()
-                                listaProductos.addAll(PersistenciaLocal.obtenerProductos())
+                                ejecutar(PantallaActual.HISTORIAL_VENTAS) { PersistenciaLocal.eliminarVenta(ventaAEliminar.id) }
                             }
                         )
                     }
@@ -139,18 +191,14 @@ fun App() {
                         PantallaFormulario(
                             productoAEditar = productoAEditar,
                             onGuardar = { producto ->
-                                PersistenciaLocal.guardarProducto(producto)
-                                listaProductos.clear()
-                                listaProductos.addAll(PersistenciaLocal.obtenerProductos())
-                                pantallaActual = PantallaActual.INVENTARIO
+                                ejecutar(PantallaActual.INVENTARIO) {
+                                    val ruta = PersistenciaLocal.prepararImagen(producto.rutaImagen)
+                                    PersistenciaLocal.guardarProducto(producto.copy(rutaImagen = ruta))
+                                }
                             },
                             onEliminar = {
-                                if (productoAEditar != null) {
-                                    PersistenciaLocal.eliminarProducto(productoAEditar!!.id)
-                                    listaProductos.clear()
-                                    listaProductos.addAll(PersistenciaLocal.obtenerProductos())
-                                }
-                                pantallaActual = PantallaActual.INVENTARIO
+                                val id = productoAEditar?.id
+                                if (id != null) ejecutar(PantallaActual.INVENTARIO) { PersistenciaLocal.eliminarProducto(id) }
                             },
                             onVolver = { pantallaActual = PantallaActual.INVENTARIO }
                         )
@@ -159,19 +207,17 @@ fun App() {
                         PantallaNuevaVenta(
                             productosDisponibles = listaProductos.filter { it.stock > 0 },
                             onVentaRealizada = { nuevaVenta ->
-                                PersistenciaLocal.registrarVenta(nuevaVenta)
-                                listaVentas.clear()
-                                listaVentas.addAll(PersistenciaLocal.obtenerVentas())
-                                listaProductos.clear()
-                                listaProductos.addAll(PersistenciaLocal.obtenerProductos())
-                                pantallaActual = PantallaActual.HISTORIAL_VENTAS
+                                ejecutar(PantallaActual.HISTORIAL_VENTAS) { PersistenciaLocal.registrarVenta(nuevaVenta) }
                             },
                             onVolver = { pantallaActual = PantallaActual.HOME }
                         )
                     }
+                    PantallaActual.RESPALDO -> {
+                        PantallaRespaldo(onActualizado = { refrescar(); cargado = true }, onVolver = { pantallaActual = PantallaActual.HOME })
+                    }
                     // 4. AGREGAMOS EL ENRUTADOR PARA ABRIR LA PANTALLA
                     PantallaActual.DASHBOARD -> {
-                        PantallaDashboard(ventas = listaVentas)
+                        PantallaDashboard(ventas = listaVentas.toList(), productos = listaProductos.toList())
                     }
                 }
             }

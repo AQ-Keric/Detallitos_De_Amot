@@ -10,8 +10,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +52,7 @@ fun PantallaNuevaVenta(
                     IconButton(onClick = {
                         if (productoSeleccionado != null) productoSeleccionado = null else onVolver()
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 backgroundColor = GrisCarbon, // Barra Superior Gris
@@ -72,13 +76,19 @@ fun ListaSeleccionProducto(productos: List<Producto>, onSeleccionar: (Producto) 
     // Reutilizamos estilo sobrio
     val GrisCarbon = Color(0xFF444444)
 
+    var busqueda by rememberSaveable { mutableStateOf("") }
+    val filtrados = productos.filter { it.nombre.contains(busqueda.trim(), ignoreCase = true) }
     if (productos.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No hay productos en inventario.", color = Color.Gray)
+            Text("No hay productos con stock. Agrega o repón unidades en Inventario.", color = Color.Gray)
         }
     } else {
         LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(productos) { producto ->
+            item {
+                BarraBusqueda(texto = busqueda, onTextoCambio = { busqueda = it }, placeholder = "Buscar producto…")
+            }
+            if (filtrados.isEmpty()) item { Text("No se encontraron productos.", color = Color.Gray) }
+            items(filtrados, key = { it.id }) { producto ->
                 val imagenBitmap = recordarImagenDesdeRuta(producto.rutaImagen)
                 Card(elevation = 2.dp, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().clickable { onSeleccionar(producto) }) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -107,17 +117,17 @@ fun FormularioVenta(producto: Producto, onConfirmar: (Venta) -> Unit) {
     val GrisCarbon = Color(0xFF444444)
     val VerdeOlivo = Color(0xFF558B2F) // Color de Éxito/Dinero
 
-    var cantidadTxt by remember { mutableStateOf("1") }
-    var totalCobrarTxt by remember { mutableStateOf(producto.precioVenta.toString()) }
-    var metodoPago by remember { mutableStateOf("Efectivo") }
+    var cantidadTxt by rememberSaveable { mutableStateOf("1") }
+    var totalCobrarTxt by rememberSaveable { mutableStateOf(producto.precioVenta.toString()) }
+    var metodoPago by rememberSaveable { mutableStateOf("Efectivo") }
     val imagenBitmap = recordarImagenDesdeRuta(producto.rutaImagen)
 
     LaunchedEffect(cantidadTxt) {
         val cant = cantidadTxt.toIntOrNull() ?: 0
-        if (cant > 0) totalCobrarTxt = (producto.precioVenta * cant).toString()
+        if (cant > 0) totalCobrarTxt = (producto.precioVenta.toLong() * cant).toString()
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(120.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFFF5F5F5)), contentAlignment = Alignment.Center) {
             if (imagenBitmap != null) Image(imagenBitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             else Icon(Icons.Default.CardGiftcard, null, Modifier.size(50.dp), tint = Color.LightGray)
@@ -151,13 +161,19 @@ fun FormularioVenta(producto: Producto, onConfirmar: (Venta) -> Unit) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        if (cantidadTxt.toIntOrNull()?.let { it in 1..producto.stock } != true) {
+            Text("Ingresa una cantidad entre 1 y ${producto.stock}.", color = MaterialTheme.colors.error)
+        }
+        if (totalCobrarTxt.toIntOrNull()?.let { it >= 0 } != true) {
+            Text("Ingresa un total válido entre 0 y ${Int.MAX_VALUE.formatoPesos()} pesos.", color = MaterialTheme.colors.error)
+        }
         Text("Método de Pago", fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start), color = GrisCarbon)
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             BotonMetodoPago("Efectivo", Icons.Default.Money, metodoPago == "Efectivo") { metodoPago = "Efectivo" }
             BotonMetodoPago("Transferencia", Icons.Default.Smartphone, metodoPago == "Transferencia") { metodoPago = "Transferencia" }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
@@ -183,7 +199,7 @@ fun FormularioVenta(producto: Producto, onConfirmar: (Venta) -> Unit) {
             modifier = Modifier.fillMaxWidth().height(60.dp),
             colors = ButtonDefaults.buttonColors(backgroundColor = VerdeOlivo), // Botón Verde Confirmar
             shape = RoundedCornerShape(12.dp),
-            enabled = (cantidadTxt.toIntOrNull() ?: 0) in 1..producto.stock
+            enabled = (cantidadTxt.toIntOrNull() ?: 0) in 1..producto.stock && totalCobrarTxt.toIntOrNull()?.let { it >= 0 } == true
         ) {
             Text("CONFIRMAR VENTA", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }

@@ -103,7 +103,7 @@ fun PantallaInventario(
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(productosFiltrados) { producto ->
+                    items(productosFiltrados, key = { it.id }) { producto ->
                         CardProducto(
                             producto = producto,
                             onEditar = { onEditarProducto(producto) },

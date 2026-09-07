@@ -9,8 +9,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,16 +40,16 @@ fun PantallaFormulario(
 
     // Variables de estado
     // Si es edición conservamos el ID; los productos nuevos reciben un UUID estable.
-    val idActual = remember { productoAEditar?.id ?: nuevoId() }
+    val idActual = rememberSaveable { productoAEditar?.id ?: nuevoId() }
 
-    var nombre by remember { mutableStateOf(productoAEditar?.nombre ?: "") }
-    var precioVentaTxt by remember { mutableStateOf(productoAEditar?.precioVenta?.toString() ?: "") }
-    var costoProduccionTxt by remember { mutableStateOf(productoAEditar?.costoProduccion?.toString() ?: "") }
-    var stockTxt by remember { mutableStateOf(productoAEditar?.stock?.toString() ?: "") }
-    var rutaImagenTemporal by remember { mutableStateOf(productoAEditar?.rutaImagen) }
+    var nombre by rememberSaveable { mutableStateOf(productoAEditar?.nombre ?: "") }
+    var precioVentaTxt by rememberSaveable { mutableStateOf(productoAEditar?.precioVenta?.toString() ?: "") }
+    var costoProduccionTxt by rememberSaveable { mutableStateOf(productoAEditar?.costoProduccion?.toString() ?: "") }
+    var stockTxt by rememberSaveable { mutableStateOf(productoAEditar?.stock?.toString() ?: "") }
+    var rutaImagenTemporal by rememberSaveable { mutableStateOf(productoAEditar?.rutaImagen) }
 
-    var mostrarMenuFoto by remember { mutableStateOf(false) }
-    var mostrarAlertaBorrar by remember { mutableStateOf(false) }
+    var mostrarMenuFoto by rememberSaveable { mutableStateOf(false) }
+    var mostrarAlertaBorrar by rememberSaveable { mutableStateOf(false) }
 
     val esEdicion = productoAEditar != null
     val titulo = if (esEdicion) "EDITAR ARTESANÍA" else "NUEVA ARTESANÍA"
@@ -121,7 +123,7 @@ fun PantallaFormulario(
                 title = { Text(titulo, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 backgroundColor = GrisCarbon,
@@ -136,7 +138,7 @@ fun PantallaFormulario(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
+                .imePadding().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
@@ -230,18 +232,23 @@ fun PantallaFormulario(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            if (precioVentaTxt.isNotEmpty() && precioVentaTxt.toIntOrNull() == null ||
+                stockTxt.isNotEmpty() && stockTxt.toIntOrNull() == null ||
+                costoProduccionTxt.isNotEmpty() && costoProduccionTxt.toIntOrNull() == null) {
+                Text("Uno de los valores es demasiado grande. Revisa los montos y el stock.", color = RojoAlerta)
+            }
             // --- 3. BOTÓN GUARDAR ---
             Button(
                 onClick = {
                     if (nombre.isNotEmpty() && precioVentaTxt.isNotEmpty() && stockTxt.isNotEmpty()) {
 
                         // 1. ASEGURAMOS LA FOTO
-                        val rutaSegura = PersistenciaLocal.prepararImagen(rutaImagenTemporal)
+                        val rutaSegura = rutaImagenTemporal
 
                         // 2. CREAMOS EL PRODUCTO
                         val producto = Producto(
                             id = idActual,
-                            nombre = nombre,
+                            nombre = nombre.trim(),
                             precioVenta = precioVentaTxt.toIntOrNull() ?: 0,
                             costoProduccion = costoProduccionTxt.toIntOrNull() ?: 0,
                             stock = stockTxt.toIntOrNull() ?: 0,
@@ -253,7 +260,9 @@ fun PantallaFormulario(
                 modifier = Modifier.fillMaxWidth().height(55.dp),
                 colors = ButtonDefaults.buttonColors(backgroundColor = GrisCarbon),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                enabled = nombre.isNotEmpty()
+                enabled = nombre.isNotBlank() && (precioVentaTxt.toIntOrNull()?.let { it >= 0 } == true) &&
+                    (stockTxt.toIntOrNull()?.let { it >= 0 } == true) &&
+                    (costoProduccionTxt.isBlank() || costoProduccionTxt.toIntOrNull()?.let { it >= 0 } == true)
             ) {
                 Icon(Icons.Default.Save, null, tint = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))

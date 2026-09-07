@@ -4,7 +4,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val FORMATO_FECHA_VENTA = DateTimeFormatter.ofPattern("dd/MM HH:mm")
+private val FORMATO_FECHA_VENTA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
 
 data class Venta(
     val id: String,
@@ -20,10 +20,10 @@ data class Venta(
     val fechaTextoLegada: String? = null
 ) {
     val fecha: String
-        get() = fechaTextoLegada ?: FORMATO_FECHA_VENTA.format(
+        get() = if (fechaEpochMillis <= 0L) fechaTextoLegada ?: "Sin fecha" else FORMATO_FECHA_VENTA.format(
             Instant.ofEpochMilli(fechaEpochMillis).atZone(ZoneId.systemDefault())
         )
 
-    val ganancia: Int
-        get() = total - (costoUnitario * cantidad)
+    val ganancia: Long
+        get() = total.toLong() - (costoUnitario.toLong() * cantidad)
 }

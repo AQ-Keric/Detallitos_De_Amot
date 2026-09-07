@@ -22,7 +22,7 @@ object FiltroVentas {
 
         return ventas.filter { venta ->
             if (venta.fechaEpochMillis <= 0L) {
-                true
+                false
             } else {
                 val fechaReal = Instant.ofEpochMilli(venta.fechaEpochMillis)
                     .atZone(ZoneId.systemDefault())

@@ -38,6 +38,9 @@ object CodecPersistencia {
         if (texto.isEmpty()) return ResultadoProductos(emptyList(), false)
 
         val idsUsados = mutableSetOf<String>()
+        val duplicados = texto.split(SEPARADOR_ITEM).map { it.substringBefore(SEPARADOR_CAMPO) }
+            .groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+        require(duplicados.isEmpty()) { "Hay IDs de productos duplicados en los datos antiguos. Revisa el original antes de migrar." }
         var requiereReescritura = false
         val productos = texto.split(SEPARADOR_ITEM).mapNotNull { registro ->
             try {
