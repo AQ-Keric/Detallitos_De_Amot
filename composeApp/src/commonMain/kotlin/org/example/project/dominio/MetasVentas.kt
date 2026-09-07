@@ -20,6 +20,9 @@ object MetasVentas {
             else -> error("Período de meta inválido")
         }
     }
+    fun ingresosGlobal(ventas: List<Venta>, desde: Long): Long =
+        ventas.filter { desde == 0L || it.fechaEpochMillis >= desde }.sumOf { it.total.toLong() }
+
     fun progreso(ingresos: Long, meta: Int): ProgresoMeta {
         require(meta > 0 && ingresos >= 0)
         return ProgresoMeta(ingresos.toDouble() / meta * 100.0,

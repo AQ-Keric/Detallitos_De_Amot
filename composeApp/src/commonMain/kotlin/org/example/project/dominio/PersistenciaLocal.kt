@@ -30,7 +30,7 @@ object PersistenciaLocal {
         requireNotNull(motor) { "Almacenamiento no disponible" }.guardarEstado(nuevo)
         cache = nuevo // Solo publicar los cambios después de confirmar la escritura.
     }
-    fun obtenerMeta(clave: String): Int? = if (clave == "total") estado().meta else estado().metasPorPeriodo[clave]
+    fun obtenerMeta(clave: String): Int? = if (clave == "total") estado().meta.takeIf { estado().metaGlobalActiva } else estado().metasPorPeriodo[clave]
     @Synchronized fun guardarMeta(clave: String, meta: Int) {
         require(meta > 0) { "La meta debe ser mayor que cero" }
         if (clave == "total") guardarMeta(meta)
@@ -40,7 +40,23 @@ object PersistenciaLocal {
         }
     }
     fun obtenerMeta(): Int = estado().meta
-    fun guardarMeta(meta: Int) = guardar(estado().copy(meta = meta))
+    @Synchronized fun guardarMeta(meta: Int) {
+        val e = estado()
+        guardar(e.copy(meta = meta, metaGlobalActiva = true,
+            metaGlobalDesde = if (e.metaGlobalActiva) e.metaGlobalDesde else System.currentTimeMillis()))
+    }
+    @Synchronized fun eliminarMeta(clave: String) {
+        val e = estado()
+        if (clave == "total") guardar(e.copy(metaGlobalActiva = false, metaGlobalDesde = 0L))
+        else {
+            MetasVentas.validarClave(clave)
+            guardar(e.copy(metasPorPeriodo = e.metasPorPeriodo - clave))
+        }
+    }
+    @Synchronized fun reiniciarMetaGlobal(monto: Int, desde: Long = System.currentTimeMillis()) {
+        require(monto > 0 && desde > 0L) { "Monto o inicio de meta inválido" }
+        guardar(estado().copy(meta = monto, metaGlobalActiva = true, metaGlobalDesde = desde))
+    }
     fun obtenerProductos(): List<Producto> = estado().productos.toList()
     fun obtenerVentas(): List<Venta> = estado().ventas.toList()
 

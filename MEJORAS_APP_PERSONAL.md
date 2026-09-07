@@ -19,7 +19,7 @@ Rama de trabajo: `mejoras-app-personal`, basada en `etapa-1-modelos` (`bbba3d2`)
 
 ## Verificación realizada
 
-El compilador Kotlin 2.2.21 compiló el dominio y sus dos suites de pruebas con target JVM 11. JUnit 4.13.2 ejecutó **23 pruebas, todas correctas**, cubriendo migración, IDs, ventas/stock, fallos de escritura sin cambio de caché, recuperación de corrupción, restauración de imágenes, ZIP incompleto y rutas inválidas, CSV y cálculos históricos.
+El compilador Kotlin 2.2.21 compiló el dominio y sus dos suites de pruebas con target JVM 11. JUnit 4.13.2 ejecutó **25 pruebas, todas correctas**, cubriendo migración, IDs, ventas/stock, fallos de escritura sin cambio de caché, recuperación de corrupción, restauración de imágenes, ZIP incompleto y rutas inválidas, CSV y cálculos históricos.
 
 `git diff --check` no detectó problemas. La compilación completa de Compose/Android no pudo ejecutarse: el wrapper de Gradle no puede descargar su distribución desde Java en este entorno (`Network is unreachable`). No se ha generado ni probado un APK nuevo en un celular y no se afirma que las pantallas hayan compilado.
 
@@ -52,3 +52,9 @@ Se preserva la idea de app local y personal. No se añaden cuentas, sincronizaci
 ## Corrección de metas por período
 
 La meta antigua se conserva exclusivamente en Total. Cada día, semana (lunes a domingo) y mes tiene su propia meta, asociada también al año; no se inventan montos para períodos nuevos. El dashboard indica el período, los pesos faltantes o excedidos y el porcentaje real, incluso sobre 100 %. Las metas se guardan fuera del hilo de interfaz, se restauran con el respaldo ZIP y conservan compatibilidad de lectura con la versión anterior del archivo.
+
+### Ciclo de la meta global
+
+Cambiar monto conserva el avance. Reiniciar pide confirmación y permite cambiar el monto; guarda una fecha de inicio y solo cuenta ventas posteriores. Eliminar quita la meta sin modificar ventas, fotos ni stock; crear otra después comienza desde ese momento. El avance de la meta es independiente de las métricas generales del dashboard, que conservan todo el historial. Cumplir una meta no la reinicia automáticamente. También se pueden quitar metas de períodos específicos. Estado activo, inicio y montos se guardan y viajan en el respaldo.
+
+La compilación completa y pruebas JVM/Android del primer commit publicado pasaron en GitHub Actions (ejecución 34074295423). La ampliación del ciclo de metas requiere una nueva ejecución.

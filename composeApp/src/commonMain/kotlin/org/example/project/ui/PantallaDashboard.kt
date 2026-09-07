@@ -50,15 +50,18 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
     // ESTADOS PARA LA META EDITABLE (Conectado a la base de datos)
     val claveMeta = MetasVentas.clave(modoActual, fechaReferencia)
     var metaDelPeriodo by remember(claveMeta) { mutableStateOf(PersistenciaLocal.obtenerMeta(claveMeta)) }
+    var inicioMetaGlobal by remember { mutableStateOf(PersistenciaLocal.estado().metaGlobalDesde) }
     val etiquetaMeta = when (modoActual) {
         ModoTiempo.DIA -> "Meta del día $fechaReferencia"
         ModoTiempo.SEMANA -> "Meta de la semana del ${fechaReferencia.with(DayOfWeek.MONDAY)}"
         ModoTiempo.MES -> "Meta de ${fechaReferencia.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("es-CL")))}"
-        ModoTiempo.TOTAL -> "Meta total acumulada"
+        ModoTiempo.TOTAL -> "Meta global"
     }
     val scope = rememberCoroutineScope()
     var guardandoMeta by remember { mutableStateOf(false) }
     ManejarVolver(enabled = guardandoMeta) {}
+    var reiniciandoMeta by remember { mutableStateOf(false) }
+    var confirmarEliminarMeta by remember { mutableStateOf(false) }
     var mostrarDialogoMeta by remember { mutableStateOf(false) }
     var inputNuevaMeta by remember { mutableStateOf("") }
     var errorMeta by remember { mutableStateOf<String?>(null) }
@@ -83,12 +86,44 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
     val topVentas = CalculadoraFinanciera.obtenerTopVentas(ventasFiltradas)
     val promedios = CalculadoraFinanciera.calcularPromedios(ventasFiltradas)
 
+    val ingresosMeta = if (modoActual == ModoTiempo.TOTAL) MetasVentas.ingresosGlobal(ventas, inicioMetaGlobal) else ingresos
+    val descripcionMeta = if (modoActual != ModoTiempo.TOTAL) "Ingresos del período seleccionado."
+        else if (inicioMetaGlobal == 0L) "Ingresos acumulados de todo el historial."
+        else "Ingresos desde " + Instant.ofEpochMilli(inicioMetaGlobal).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))
+    if (confirmarEliminarMeta) {
+        AlertDialog(onDismissRequest = { if (!guardandoMeta) confirmarEliminarMeta = false },
+            title = { Text("¿Eliminar esta meta?") },
+            text = { Text("Se quitará únicamente la meta. Tus ventas, imágenes e inventario se conservarán. Después podrás definir otra.") },
+            confirmButton = { TextButton(enabled = !guardandoMeta, onClick = {
+                val clave = claveMeta
+                guardandoMeta = true
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { PersistenciaLocal.eliminarMeta(clave) }
+                        metaDelPeriodo = null
+                        inicioMetaGlobal = PersistenciaLocal.estado().metaGlobalDesde
+                        confirmarEliminarMeta = false
+                    } catch (e: Exception) { errorMeta = e.message ?: "No se pudo eliminar la meta" }
+                    finally { guardandoMeta = false }
+                }
+            }) { Text(if (guardandoMeta) "Eliminando…" else "Eliminar") } },
+            dismissButton = { TextButton(enabled = !guardandoMeta, onClick = { confirmarEliminarMeta = false }) { Text("Cancelar") } }
+        )
+    }
     // POPUP PARA EDITAR LA META
     if (mostrarDialogoMeta) {
         AlertDialog(
             onDismissRequest = { if (!guardandoMeta) mostrarDialogoMeta = false },
-            title = { Text(etiquetaMeta, fontWeight = FontWeight.Bold, color = GrisCarbon, fontSize = 18.sp) },
+            title = { Text(if (reiniciandoMeta) "Reiniciar meta global" else etiquetaMeta, fontWeight = FontWeight.Bold, color = GrisCarbon, fontSize = 18.sp) },
             text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(when {
+                    reiniciandoMeta -> "El avance empezará desde cero con las ventas posteriores a la confirmación. Puedes mantener o cambiar el monto. No se borrará ninguna venta."
+                    modoActual == ModoTiempo.TOTAL && metaDelPeriodo == null -> "Esta nueva meta contará las ventas desde ahora."
+                    metaDelPeriodo != null -> "Cambiar el monto conserva el avance actual."
+                    else -> "La meta usará todas las ventas del período seleccionado."
+                }, fontSize = 13.sp)
                 OutlinedTextField(
                     enabled = !guardandoMeta,
                     value = inputNuevaMeta,
@@ -107,6 +142,7 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
                         focusedLabelColor = GrisCarbon
                     )
                 )
+                }
             },
             confirmButton = {
                 TextButton(enabled = !guardandoMeta && (inputNuevaMeta.toIntOrNull() ?: 0) > 0, onClick = {
@@ -115,13 +151,17 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
                     guardandoMeta = true
                     scope.launch {
                         try {
-                            withContext(Dispatchers.IO) { PersistenciaLocal.guardarMeta(clave, monto) }
+                            withContext(Dispatchers.IO) {
+                                if (reiniciandoMeta) PersistenciaLocal.reiniciarMetaGlobal(monto)
+                                else PersistenciaLocal.guardarMeta(clave, monto)
+                            }
                             metaDelPeriodo = monto
+                            inicioMetaGlobal = PersistenciaLocal.estado().metaGlobalDesde
                             mostrarDialogoMeta = false
                         } catch (e: Exception) { errorMeta = e.message ?: "No se pudo guardar la meta" }
                         finally { guardandoMeta = false }
                     }
-                }) { Text(if (guardandoMeta) "Guardando…" else "Guardar", color = GrisCarbon, fontWeight = FontWeight.Bold) }
+                }) { Text(if (guardandoMeta) "Guardando…" else if (reiniciandoMeta) "Reiniciar" else "Guardar", color = GrisCarbon, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(enabled = !guardandoMeta, onClick = { mostrarDialogoMeta = false }) { Text("Cancelar", color = Color.Gray) }
@@ -234,12 +274,20 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
         // --- SECCIÓN NUEVA: META DE VENTAS ---
         item {
             TarjetaMeta(
-                ingresos = ingresos,
+                ingresos = ingresosMeta,
                 meta = metaDelPeriodo,
+                descripcion = descripcionMeta,
+                onEliminarClick = { confirmarEliminarMeta = true },
+                onReiniciarClick = if (modoActual == ModoTiempo.TOTAL) ({
+                    reiniciandoMeta = true
+                    inputNuevaMeta = metaDelPeriodo?.toString().orEmpty()
+                    mostrarDialogoMeta = true
+                }) else null,
                 titulo = etiquetaMeta,
                 colorBarra = ColorMeta,
                 colorFondo = BlancoPuro,
                 onEditarClick = {
+                    reiniciandoMeta = false
                     inputNuevaMeta = metaDelPeriodo?.toString().orEmpty()
                     mostrarDialogoMeta = true
                 }
@@ -304,11 +352,11 @@ fun PantallaDashboard(ventas: List<Venta>, productos: List<org.example.project.d
 // =======================================================
 
 @Composable
-fun TarjetaMeta(ingresos: Long, meta: Int?, titulo: String, colorBarra: Color, colorFondo: Color, onEditarClick: () -> Unit) {
+fun TarjetaMeta(ingresos: Long, meta: Int?, titulo: String, descripcion: String, colorBarra: Color, colorFondo: Color, onEditarClick: () -> Unit, onEliminarClick: () -> Unit, onReiniciarClick: (() -> Unit)?) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colorFondo)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(titulo, color = Color.DarkGray, fontWeight = FontWeight.Bold)
-            Text("Se calcula con los ingresos por ventas del período seleccionado.", color = Color.Gray, fontSize = 12.sp)
+            Text(descripcion, color = Color.Gray, fontSize = 12.sp)
             if (meta == null) {
                 Text("No has definido una meta para este período.", color = Color.Gray)
                 OutlinedButton(onClick = onEditarClick) { Text("Definir meta") }
@@ -324,7 +372,9 @@ fun TarjetaMeta(ingresos: Long, meta: Int?, titulo: String, colorBarra: Color, c
                     avance.excedente > 0 -> "¡Meta superada por $${avance.excedente.formatoPesos()}!"
                     else -> "¡Meta alcanzada!"
                 }, color = Color.DarkGray)
-                TextButton(onClick = onEditarClick) { Text("Cambiar meta") }
+                TextButton(onClick = onEditarClick) { Text("Cambiar monto") }
+                onReiniciarClick?.let { accion -> OutlinedButton(onClick = accion) { Text("Reiniciar desde cero") } }
+                TextButton(onClick = onEliminarClick) { Text("Eliminar meta", color = Color(0xFFC62828)) }
             }
         }
     }

@@ -15,6 +15,39 @@ class PersistenciaRespaldoTest {
     private fun venta(p: Producto = producto(), id: String = "v", fecha: Long = 1000) = Venta(id, p.id, p.nombre, 2, 18000, p.precioVenta, p.costoProduccion, "Efectivo", p.rutaImagen, fecha)
     @AfterTest fun limpiar() { PersistenciaLocal.motor = null; temporal.deleteRecursively() }
 
+    @Test fun reiniciarYEliminarMetaNoTocanVentasNiStock() {
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        PersistenciaLocal.guardarProducto(producto())
+        PersistenciaLocal.registrarVenta(venta(fecha = 1000))
+        val antes = PersistenciaLocal.estado()
+        PersistenciaLocal.reiniciarMetaGlobal(50000, 2000)
+        assertEquals(0L, MetasVentas.ingresosGlobal(PersistenciaLocal.obtenerVentas(), 2000))
+        PersistenciaLocal.registrarVenta(venta(id = "nueva", fecha = 3000))
+        assertEquals(18000L, MetasVentas.ingresosGlobal(PersistenciaLocal.obtenerVentas(), 2000))
+        PersistenciaLocal.guardarMeta("total", 75000)
+        assertEquals(2000L, PersistenciaLocal.estado().metaGlobalDesde)
+        val e = PersistenciaLocal.estado()
+        assertEquals(e, CodecEstado.decodificar(CodecEstado.codificar(e)))
+        PersistenciaLocal.eliminarMeta("total")
+        assertNull(PersistenciaLocal.obtenerMeta("total"))
+        assertEquals(e.ventas, PersistenciaLocal.obtenerVentas())
+        assertEquals(e.productos, PersistenciaLocal.obtenerProductos())
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        assertNull(PersistenciaLocal.obtenerMeta("total"))
+        PersistenciaLocal.guardarMeta("total", 90000)
+        assertTrue(PersistenciaLocal.estado().metaGlobalDesde > 3000)
+        assertEquals(90000, PersistenciaLocal.obtenerMeta("total"))
+        assertEquals(antes.ventas.size + 1, PersistenciaLocal.obtenerVentas().size)
+    }
+    @Test fun sePuedeQuitarMetaDeUnMesSinTocarLosDemas() {
+        PersistenciaLocal.motor = MotorArchivo(temporal)
+        PersistenciaLocal.guardarMeta("mes:2026-09", 10000)
+        PersistenciaLocal.guardarMeta("mes:2026-10", 20000)
+        PersistenciaLocal.eliminarMeta("mes:2026-09")
+        assertNull(PersistenciaLocal.obtenerMeta("mes:2026-09"))
+        assertEquals(20000, PersistenciaLocal.obtenerMeta("mes:2026-10"))
+        assertEquals(200000, PersistenciaLocal.obtenerMeta("total"))
+    }
     @Test fun metasIndependientesSeConservanAlReabrirYExportar() {
         PersistenciaLocal.motor = MotorArchivo(temporal)
         val septiembre = MetasVentas.clave(ModoTiempo.MES, LocalDate.of(2026, 9, 1))
@@ -50,7 +83,7 @@ class PersistenciaRespaldoTest {
     }
     @Test fun respaldoAnteriorConservaMetaTotalSinInventarMetasPorPeriodo() {
         val xml = CodecEstado.codificar(EstadoDatos(meta = 75000)).toString(Charsets.UTF_8)
-            .replace("<entry key=\"version\">2</entry>", "<entry key=\"version\">1</entry>")
+            .replace("<entry key=\"version\">3</entry>", "<entry key=\"version\">1</entry>")
         val e = CodecEstado.decodificar(xml.toByteArray())
         assertEquals(75000, e.meta)
         assertTrue(e.metasPorPeriodo.isEmpty())
