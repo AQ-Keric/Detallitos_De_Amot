@@ -19,12 +19,17 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
       - name: Pruebas y compilación Android
-        run: bash gradlew :composeApp:jvmTest :composeApp:testDebugUnitTest :composeApp:assembleDebug --no-daemon
+        run: bash gradlew :composeApp:jvmTest :composeApp:testDebugUnitTest :composeApp:assembleDebug :composeApp:assembleRelease --no-daemon
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: Detallitos-Android-debug
           path: composeApp/build/outputs/apk/debug/*.apk
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Detallitos-Android-release-sin-firma
+          path: composeApp/build/outputs/apk/release/*-unsigned.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
