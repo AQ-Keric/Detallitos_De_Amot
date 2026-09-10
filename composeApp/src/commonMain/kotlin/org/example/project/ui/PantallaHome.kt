@@ -9,6 +9,9 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import org.example.project.dominio.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,9 +27,7 @@ import org.jetbrains.compose.resources.painterResource
 
 
 @Composable
-fun PantallaHome(
-    onNavegarAVenta: () -> Unit
-) {
+fun PantallaHome(onNavegarAVenta: () -> Unit) {
     // --- PALETA ELEGANCIA ---
     val GrisCarbon = Color(0xFF444444)
     val BlancoPuro = Color(0xFFFFFFFF)
@@ -35,14 +36,14 @@ fun PantallaHome(
         modifier = Modifier
             .fillMaxSize()
             .background(BlancoPuro) // Fondo limpio
-            .padding(24.dp),
+            .verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         // --- LOGO (Con el recorte que hiciste) ---
         Box(
             modifier = Modifier
-                .size(220.dp) // Grande para que luzca
+                .size(180.dp) // Grande para que luzca
                 .clip(CircleShape)
                 .background(Color.White),
             contentAlignment = Alignment.Center
@@ -74,15 +75,7 @@ fun PantallaHome(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "SISTEMA DE GESTIÓN",
-            fontSize = 14.sp,
-            letterSpacing = 3.sp, // Letras separadas (estilo premium)
-            color = Color.Gray,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(80.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // --- BOTÓN PRINCIPAL ---
         Button(

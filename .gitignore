@@ -24,3 +24,10 @@ node_modules/
 *.aab
 *.rar
 composeApp/release/
+
+# Claves de firma privadas: conservar siempre fuera del repositorio
+*.jks
+*.keystore
+*.p12
+keystore.properties
+clave.txt

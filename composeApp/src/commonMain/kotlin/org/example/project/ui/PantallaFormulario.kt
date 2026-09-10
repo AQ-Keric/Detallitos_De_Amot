@@ -9,8 +9,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.example.project.dominio.PersistenciaLocal
 import org.example.project.dominio.Producto
+import org.example.project.dominio.nuevoId
 
 @Composable
 fun PantallaFormulario(
@@ -36,17 +39,19 @@ fun PantallaFormulario(
     val GrisClaro = Color(0xFFF5F5F5)
 
     // Variables de estado
-    // Si es edición, usamos el ID existente. Si es nuevo, generamos uno por hora actual.
-    val idActual = remember { productoAEditar?.id ?: System.currentTimeMillis().toString() }
+    // Si es edición conservamos el ID; los productos nuevos reciben un UUID estable.
+    val idActual = rememberSaveable { productoAEditar?.id ?: nuevoId() }
 
-    var nombre by remember { mutableStateOf(productoAEditar?.nombre ?: "") }
-    var precioVentaTxt by remember { mutableStateOf(productoAEditar?.precioVenta?.toString() ?: "") }
-    var costoProduccionTxt by remember { mutableStateOf(productoAEditar?.costoProduccion?.toString() ?: "") }
-    var stockTxt by remember { mutableStateOf(productoAEditar?.stock?.toString() ?: "") }
-    var rutaImagenTemporal by remember { mutableStateOf(productoAEditar?.rutaImagen) }
+    var nombre by rememberSaveable { mutableStateOf(productoAEditar?.nombre ?: "") }
+    var precioVentaTxt by rememberSaveable { mutableStateOf(productoAEditar?.precioVenta?.toString() ?: "") }
+    var costoProduccionTxt by rememberSaveable { mutableStateOf(productoAEditar?.costoProduccion?.toString() ?: "") }
+    var stockTxt by rememberSaveable { mutableStateOf(productoAEditar?.stock?.toString() ?: "") }
+    var avisoStock by rememberSaveable { mutableStateOf(if (productoAEditar == null) true else productoAEditar.umbralStockBajo != null) }
+    var umbralTxt by rememberSaveable { mutableStateOf(productoAEditar?.umbralStockBajo?.toString() ?: "3") }
+    var rutaImagenTemporal by rememberSaveable { mutableStateOf(productoAEditar?.rutaImagen) }
 
-    var mostrarMenuFoto by remember { mutableStateOf(false) }
-    var mostrarAlertaBorrar by remember { mutableStateOf(false) }
+    var mostrarMenuFoto by rememberSaveable { mutableStateOf(false) }
+    var mostrarAlertaBorrar by rememberSaveable { mutableStateOf(false) }
 
     val esEdicion = productoAEditar != null
     val titulo = if (esEdicion) "EDITAR ARTESANÍA" else "NUEVA ARTESANÍA"
@@ -56,7 +61,7 @@ fun PantallaFormulario(
         rutaImagenTemporal = nuevaRuta
         mostrarMenuFoto = false
     }
-    val imagenBitmap = recordarImagenDesdeRuta(rutaImagenTemporal)
+    val imagenBitmap = recordarImagenDesdeRuta(rutaImagenTemporal, maxDimension = 1024)
 
     // --- ALERTA BORRAR ---
     if (mostrarAlertaBorrar) {
@@ -120,7 +125,7 @@ fun PantallaFormulario(
                 title = { Text(titulo, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 backgroundColor = GrisCarbon,
@@ -135,7 +140,7 @@ fun PantallaFormulario(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
+                .imePadding().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
@@ -227,24 +232,44 @@ fun PantallaFormulario(
                 colors = inputColors
             )
 
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Aviso de stock bajo", modifier = Modifier.weight(1f))
+                Switch(checked = avisoStock, onCheckedChange = { avisoStock = it })
+            }
+            if (avisoStock) {
+                OutlinedTextField(
+                    value = umbralTxt,
+                    onValueChange = { if (it.all { c -> c.isDigit() }) umbralTxt = it },
+                    label = { Text("Avisar con estas unidades o menos") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = umbralTxt.toIntOrNull() == null,
+                    modifier = Modifier.fillMaxWidth(), singleLine = true, colors = inputColors
+                )
+            }
             Spacer(modifier = Modifier.height(24.dp))
 
+            if (precioVentaTxt.isNotEmpty() && precioVentaTxt.toIntOrNull() == null ||
+                stockTxt.isNotEmpty() && stockTxt.toIntOrNull() == null ||
+                costoProduccionTxt.isNotEmpty() && costoProduccionTxt.toIntOrNull() == null) {
+                Text("Uno de los valores es demasiado grande. Revisa los montos y el stock.", color = RojoAlerta)
+            }
             // --- 3. BOTÓN GUARDAR ---
             Button(
                 onClick = {
                     if (nombre.isNotEmpty() && precioVentaTxt.isNotEmpty() && stockTxt.isNotEmpty()) {
 
                         // 1. ASEGURAMOS LA FOTO
-                        val rutaSegura = PersistenciaLocal.prepararImagen(rutaImagenTemporal)
+                        val rutaSegura = rutaImagenTemporal
 
                         // 2. CREAMOS EL PRODUCTO
                         val producto = Producto(
                             id = idActual,
-                            nombre = nombre,
+                            nombre = nombre.trim(),
                             precioVenta = precioVentaTxt.toIntOrNull() ?: 0,
                             costoProduccion = costoProduccionTxt.toIntOrNull() ?: 0,
                             stock = stockTxt.toIntOrNull() ?: 0,
-                            rutaImagen = rutaSegura
+                            rutaImagen = rutaSegura,
+                            umbralStockBajo = if (avisoStock) umbralTxt.toInt() else null
                         )
                         onGuardar(producto)
                     }
@@ -252,7 +277,9 @@ fun PantallaFormulario(
                 modifier = Modifier.fillMaxWidth().height(55.dp),
                 colors = ButtonDefaults.buttonColors(backgroundColor = GrisCarbon),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                enabled = nombre.isNotEmpty()
+                enabled = (!avisoStock || umbralTxt.toIntOrNull()?.let { it >= 0 } == true) && nombre.isNotBlank() && (precioVentaTxt.toIntOrNull()?.let { it >= 0 } == true) &&
+                    (stockTxt.toIntOrNull()?.let { it >= 0 } == true) &&
+                    (costoProduccionTxt.isBlank() || costoProduccionTxt.toIntOrNull()?.let { it >= 0 } == true)
             ) {
                 Icon(Icons.Default.Save, null, tint = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))

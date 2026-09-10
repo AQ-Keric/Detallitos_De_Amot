@@ -50,7 +50,10 @@ fun PantallaHistorialVentas(
 
     val ventasAgrupadas by remember(ventasFiltradas) {
         derivedStateOf {
-            ventasFiltradas.groupBy { it.fecha.take(5) }
+            ventasFiltradas.sortedByDescending { it.fechaEpochMillis }.groupBy {
+                if (it.fechaEpochMillis > 0L) java.time.Instant.ofEpochMilli(it.fechaEpochMillis).atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) else "Sin fecha válida"
+            }
         }
     }
 
@@ -58,7 +61,7 @@ fun PantallaHistorialVentas(
         AlertDialog(
             onDismissRequest = { ventaParaBorrar = null },
             title = { Text("¿Anular Venta?", color = GrisCarbon) },
-            text = { Text("Se devolverán las unidades al inventario.") },
+            text = { Text(if (ventaParaBorrar?.productoId == null) "Esta venta antigua no tiene un producto asociado. Se creará un producto separado con las unidades devueltas." else "Se devolverán las unidades al producto original. Si fue eliminado, se recuperará usando los datos históricos.") },
             confirmButton = {
                 TextButton(onClick = { onEliminarVenta(ventaParaBorrar!!); ventaParaBorrar = null }) {
                     Text("ANULAR", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
@@ -117,7 +120,7 @@ fun PantallaHistorialVentas(
                                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                             )
                         }
-                        items(listaVentasDelDia) { venta ->
+                        items(listaVentasDelDia, key = { it.id }) { venta ->
                             val imagenBitmap = recordarImagenDesdeRuta(venta.rutaImagen)
                             CardVenta(venta, imagenBitmap, { ventaParaBorrar = venta }, { ventaParaVerFoto = venta })
                         }
@@ -154,6 +157,9 @@ fun CardVenta(
             Column(modifier = Modifier.weight(1f)) {
                 Text(venta.productoNombre, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = GrisCarbon)
                 Text("${venta.cantidad} un. • ${venta.fecha}", style = MaterialTheme.typography.caption, color = Color.Gray)
+                if (venta.fechaTextoLegada != null && venta.fechaEpochMillis > 0L) {
+                    Text("Año estimado al migrar", style = MaterialTheme.typography.caption, color = Color.Gray)
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(iconoPago, null, tint = colorPago, modifier = Modifier.size(14.dp))
@@ -162,7 +168,7 @@ fun CardVenta(
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("$${venta.total}", style = MaterialTheme.typography.subtitle1, color = GrisCarbon, fontWeight = FontWeight.ExtraBold)
+                Text("$${venta.total.formatoPesos()}", style = MaterialTheme.typography.subtitle1, color = GrisCarbon, fontWeight = FontWeight.ExtraBold)
                 IconButton(onClick = onBorrar) { Icon(Icons.Default.Delete, contentDescription = "Anular", tint = Color.LightGray) }
             }
         }
@@ -171,7 +177,7 @@ fun CardVenta(
 
 @Composable
 fun DialogFotoGrandeHistoria(venta: Venta, onDismiss: () -> Unit) {
-    val imagenBitmap = recordarImagenDesdeRuta(venta.rutaImagen)
+    val imagenBitmap = recordarImagenDesdeRuta(venta.rutaImagen, maxDimension = 2048)
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp), elevation = 8.dp, modifier = Modifier.fillMaxWidth().height(400.dp)) {
             Box(modifier = Modifier.fillMaxSize()) {
