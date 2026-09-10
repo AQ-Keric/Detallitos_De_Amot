@@ -26,7 +26,6 @@ with tempfile.TemporaryDirectory(prefix="detallitos-firma-") as temp:
     subprocess.run([str(apksigner), "sign", "--ks", str(firma / "detallitos-release.p12"),
         "--ks-type", "PKCS12", "--ks-key-alias", "detallitos",
         "--ks-pass", "file:" + str(firma / "clave.txt"),
-        "--key-pass", "file:" + str(firma / "clave.txt"),
         "--out", str(salida), str(alineado)], check=True)
     subprocess.run([str(apksigner), "verify", "--verbose", "--print-certs", str(salida)], check=True)
     subprocess.run([str(zipalign), "-c", "-P", "16", "4", str(salida)], check=True)
